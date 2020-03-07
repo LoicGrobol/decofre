@@ -1,11 +1,15 @@
 DeCOFre
 ========================================
 
-**De**tecting **C**oreferences for **O**ral **Fre**nch<a href="#foottext1" id="footnote1">¹</a>
+**De**tecting **C**oreferences for **O**ral **Fre**nch<a href="#foottext1" id="footnote1">¹</a>.
+
+This was developed for application on spoken French as part of my PhD thesis, it is relatively easy
+to apply it to other languages and genres, though.
 
 ## Installation
 
-1. Install with pip (Using the `--pre` flag until allennlp release a stable 0.9.1, at which point we'll also put a release on pypi)
+1. Install with pip (Using the `--pre` flag until allennlp release a stable 0.9.1, at which point
+   we'll also put a release on pypi)
 
    ```console
    python -m pip install --pre git+https://github.com/LoicGrobol/decofre
