@@ -17,15 +17,48 @@ to apply it to other languages and genres, though.
 
 2. Install the additional dependencies
 
-   ```bash
+   ```console
    python -m spacy download fr_core_news_sm
    ```
 
-## Running
+## Running a pretrained model
 
-1. Produce the intermediate representation for mention detection, run `python
-   decofre/formats/raw_text.py monfichier.txt spans.json`
-2. Run the mention detector `python decofre/detmentions.py detector.model spans.json detected.json`
+Use `decofre-infer`, e.g.
+
+```console
+decofre-infer path/to/detector.model path/to/coref.model path/to/raw_text.txt
+```
+
+Its output is still rather crude and mostly meant for demonstration purpose.
+
+## Training a model
+
+### Downloading ANCOR
+
+So far the only corpus we officially support (more in preparation, along with an easier preparing
+procedure).
+
+-  Clone this repo `git clone https://github.com/LoicGrobol/decofre && cd decofre`
+- Ensure you are in an environment where DeCOFre has been installed (to be sure that all the
+  dependencies are correct)
+- Run the bootstrap script `doit run datasets/ancor/ancor.py`
+
+### Actual training
+
+Use `decofre-train`, e.g.
+
+```console
+decofre-train --config tests/sanity-check.jsonnet --model-config decofre/models/default.jsonnet --out-dir /path/to/an/output/directory
+```
+
+This will put a `detector.model` and a `coref.model` files in the selected output directory, that
+you can then load in `decofre-infer`.
+
+You probably want to substitute the config files for your own, see also ANCOR config files in
+[datasets/ancor/](datasets/ancor). The config files are not really documented right now, but you can
+take inspiration from the provided examples. See also `decofre-train --help` for other options.
+
+**This is by no mean fast, you have been warned.**
 
 ## Citation
 

@@ -125,13 +125,12 @@ def task_get_data_source():
             subdir = target_dir / name / "source"
             subdir.mkdir(parents=True, exist_ok=True)
             for f in files:
-                copy(temppath / f, subdir / f)
+                copy(temppath / "ancoras" / "tei" / f, subdir / f)
 
     return {
         "actions": [
             (doit.tools.create_folder, (target_dir,)),
-            (success_wrapper(download), (source_url, temppath, "ancor.tar.gz")),
-            (shutil.unpack_archive, (str(temppath / "ancor.tar.gz"), str(temppath))),
+            (success_wrapper(download), (source_url, temppath, "ancoras")),
             split_data,
             tempdir.cleanup,
         ],
@@ -215,7 +214,11 @@ def task_copy_tiny_fixtures():
     }
 
 
-if __name__ == "__main__":
-    import doit
 
+def main_entry_point(argv=None):
+    import doit
     doit.run(globals())
+
+
+if __name__ == "__main__":
+    main_entry_point()
