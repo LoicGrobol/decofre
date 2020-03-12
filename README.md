@@ -41,7 +41,7 @@ procedure).
 -  Clone this repo `git clone https://github.com/LoicGrobol/decofre && cd decofre`
 - Ensure you are in an environment where DeCOFre has been installed (to be sure that all the
   dependencies are correct)
-- Run the bootstrap script `doit run datasets/ancor/ancor.py`
+- Run the bootstrap script `python -m doit run -f datasets/ancor/ancor.py`
 
 ### Actual training
 
