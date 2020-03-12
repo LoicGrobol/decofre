@@ -54,6 +54,10 @@ decofre-train --config tests/sanity-check.jsonnet --model-config decofre/models/
 This will put a `detector.model` and a `coref.model` files in the selected output directory, that
 you can then load in `decofre-infer`.
 
+The `sanity-check` trainig config is, well, *a sanity check*, meant to see if DeCOFre actually
+ runs in your environment and uses a tiny training set to make it fast. The resulting models
+will therefore be awful. This is normal, don't be alarmed.
+
 You probably want to substitute the config files for your own, see also ANCOR config files in
 [datasets/ancor/](datasets/ancor). The config files are not really documented right now, but you can
 take inspiration from the provided examples. See also `decofre-train --help` for other options.
