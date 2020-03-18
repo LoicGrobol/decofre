@@ -1,5 +1,9 @@
 DeCOFre
-========================================
+=======
+
+[![Build Status](https://github.com/LoicGrobol/decofre/workflows/CI/badge.svg)](https://github.com/LoicGrobol/decofre/actions?query=workflow%3ACI)
+[![PyPI](https://img.shields.io/pypi/v/decofre.svg)](https://pypi.org/project/decofre)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 **De**tecting **C**oreferences for **O**ral **Fre**nch<a href="#foottext1" id="footnote1">¹</a>.
 
@@ -11,7 +15,7 @@ to apply it to other languages and genres, though.
 1. Install with pip
 
    ```console
-   python -m pip install git+https://github.com/LoicGrobol/decofre
+   python -m pip install --pre decofre
    ```
 
 2. Install the additional dependencies
