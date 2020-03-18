@@ -221,7 +221,9 @@ class ContextFreeEncoder(Encoder):
             if isinstance(self.model.tokens_encoder, libdecofre.ContextFreeWordEncoder):
                 word_embeddings_dim = self.model.tokens_encoder.words_embeddings_dim
                 chars_embeddings_dim = self.model.tokens_encoder.chars_embeddings_dim
-            elif isinstance(self.model.tokens_encoder, libdecofre.FeaturefulWordEncoder):
+            elif isinstance(
+                self.model.tokens_encoder, libdecofre.FeaturefulWordEncoder
+            ):
                 word_embeddings_dim = (
                     self.model.tokens_encoder.words_encoder.words_embeddings_dim
                 )
@@ -335,7 +337,9 @@ class ContextFreeEncoder(Encoder):
                 (f["vocabulary_size"], f["embeddings_dim"], None)
                 for f in token_features
             )
-            token_features_encoder = libdecofre.CategoricalFeaturesBag(token_features_lst)
+            token_features_encoder = libdecofre.CategoricalFeaturesBag(
+                token_features_lst
+            )
             words_encoder = libdecofre.FeaturefulWordEncoder(
                 words_encoder=featureless_words_encoder,
                 features_encoder=token_features_encoder,
@@ -639,7 +643,6 @@ class ELMoEncoder(Encoder):
 
 
 class BERTEncoder(Encoder):
-
     def __init__(
         self,
         model: libdecofre.FeaturefulSpanEncoder,
@@ -650,7 +653,7 @@ class BERTEncoder(Encoder):
         super().__init__(model, model.out_dim, features, features_digitizers)
         self.pretrained = pretrained
         self.tokenizer = transformers.AutoTokenizer.from_pretrained(
-            self.pretrained, do_lowercase_and_remove_accent=False
+            self.pretrained, do_lowercase_and_remove_accent=False, use_fast=True
         )
 
     def digitize(
