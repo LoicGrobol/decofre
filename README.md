@@ -8,11 +8,10 @@ to apply it to other languages and genres, though.
 
 ## Installation
 
-1. Install with pip (Using the `--pre` flag until allennlp release a stable 0.9.1, at which point
-   we'll also put a release on pypi)
+1. Install with pip
 
    ```console
-   python -m pip install --pre git+https://github.com/LoicGrobol/decofre
+   python -m pip install git+https://github.com/LoicGrobol/decofre
    ```
 
 2. Install the additional dependencies

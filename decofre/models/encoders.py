@@ -23,10 +23,14 @@ import transformers
 import ujson as json
 
 from loguru import logger
-from allennlp.modules.elmo import batch_to_ids
 
 from decofre import datatools, libdecofre, lexicon
 from decofre.models import Model, InvalidModelException, config, utils
+
+try:
+    from allennlp.modules import elmo
+except ImportError:
+    elmo = None
 
 
 class Encoder(Model, metaclass=abc.ABCMeta):
@@ -481,165 +485,171 @@ class ContextFreeEncoder(Encoder):
         )
 
 
-class ELMoEncoder(Encoder):
-    """
-    A wrapper around a `libdecofre.FeaturefulSpanEncoder` that provides digitization
-    and serialization.
-    """
+if elmo is not None:
 
-    def __init__(
-        self,
-        model: libdecofre.FeaturefulSpanEncoder,
-        features: ty.Sequence[ty.Dict[str, ty.Any]],
-        features_digitizers: ty.Dict[str, utils.Digitizer],
-        elmo_weight_file: str,
-        elmo_options_file: str,
-    ):
-        super().__init__(model, model.out_dim, features, features_digitizers)
-        self.elmo_weight_file = elmo_weight_file
-        self.elmo_options_file = elmo_options_file
+    class ELMoEncoder(Encoder):
+        """
+        A wrapper around a `libdecofre.FeaturefulSpanEncoder` that provides digitization
+        and serialization.
+        """
 
-    def digitize(
-        self, span: ty.Mapping[str, ty.Union[str, int, ty.Sequence[str]]]
-    ) -> datatools.FeaturefulSpan:
-        """Digitize a span."""
-        left_context = ty.cast(ty.Sequence[str], span["left_context"])
-        content = ty.cast(ty.Sequence[str], span["content"])
-        right_context = ty.cast(ty.Sequence[str], span["right_context"])
-        words = batch_to_ids([[*left_context, *content, *right_context]])
-        # FIXME: :art:
-        span_boundaries = (len(left_context), len(left_context) + len(content))
-        feats = self.digitize_feats(span)
-        return datatools.FeaturefulSpan(words, span_boundaries, feats)
+        def __init__(
+            self,
+            model: libdecofre.FeaturefulSpanEncoder,
+            features: ty.Sequence[ty.Dict[str, ty.Any]],
+            features_digitizers: ty.Dict[str, utils.Digitizer],
+            elmo_weight_file: str,
+            elmo_options_file: str,
+        ):
+            super().__init__(model, model.out_dim, features, features_digitizers)
+            self.elmo_weight_file = elmo_weight_file
+            self.elmo_options_file = elmo_options_file
 
-    def save(self, path: ty.Union[str, pathlib.Path]):
-        """Save as a model archive."""
-        logger.debug(f"Saving the model to {path}")
-        with tempfile.TemporaryDirectory() as _tempdir:
-            tempdir = pathlib.Path(_tempdir)
-            torch.save(self.model.state_dict(), tempdir / "weights.dat")
+        def digitize(
+            self, span: ty.Mapping[str, ty.Union[str, int, ty.Sequence[str]]]
+        ) -> datatools.FeaturefulSpan:
+            """Digitize a span."""
+            left_context = ty.cast(ty.Sequence[str], span["left_context"])
+            content = ty.cast(ty.Sequence[str], span["content"])
+            right_context = ty.cast(ty.Sequence[str], span["right_context"])
+            words = elmo.batch_to_ids([[*left_context, *content, *right_context]])
+            # FIXME: :art:
+            span_boundaries = (len(left_context), len(left_context) + len(content))
+            feats = self.digitize_feats(span)
+            return datatools.FeaturefulSpan(words, span_boundaries, feats)
 
-            features_dump = copy.deepcopy(self._features)
-            for f in features_dump:
-                digitization = f.get("digitization", None)
-                if digitization is None:
-                    continue
-                if digitization == "lexicon":
-                    lexicon_filename = f"{f['name']}.lexicon"
-                    lexicon.dump(f["lexicon"], tempdir / lexicon_filename)
-                f["lexicon"] = lexicon_filename
+        def save(self, path: ty.Union[str, pathlib.Path]):
+            """Save as a model archive."""
+            logger.debug(f"Saving the model to {path}")
+            with tempfile.TemporaryDirectory() as _tempdir:
+                tempdir = pathlib.Path(_tempdir)
+                torch.save(self.model.state_dict(), tempdir / "weights.dat")
 
-            encoder_config = {
-                "type": "elmo",
-                "span_encoding_dim": self.model.out_dim,
-                "hidden_dim": self.model.span_encoder.hidden_dim,
-                "features": features_dump,
-                "elmo_weight_file": self.elmo_weight_file,
-                "elmo_options_file": self.elmo_options_file,
-            }
-            with open(tempdir / "config.json", "w") as config_stream:
-                json.dump(encoder_config, config_stream)
-
-            archive = shutil.make_archive(str(tempdir), "gztar", root_dir=tempdir)
-            shutil.move(archive, path)
-
-    @classmethod
-    def load(cls, model_path: ty.Union[str, pathlib.Path]) -> "ELMoEncoder":
-        """Load a model archive."""
-        with tempfile.TemporaryDirectory() as _tempdir:
-            tempdir = pathlib.Path(_tempdir)
-            try:
-                shutil.unpack_archive(str(model_path), tempdir, format="gztar")
-            except shutil.ReadError as e:
-                raise InvalidModelException(f"Couldn't unpack {model_path}") from e
-            try:
-                with open(tempdir / "config.json") as config_stream:
-                    encoder_config = config.encoder_schema.validate(
-                        json.load(config_stream)
-                    )
-            except FileNotFoundError as e:
-                raise InvalidModelException(f"Files missing in {model_path}") from e
-            except schema.SchemaError as e:
-                raise InvalidModelException(f"Invalid config in {model_path}") from e
-
-            try:
-                features = encoder_config["features"]
-                for f in features:
+                features_dump = copy.deepcopy(self._features)
+                for f in features_dump:
                     digitization = f.get("digitization", None)
+                    if digitization is None:
+                        continue
                     if digitization == "lexicon":
-                        f["lexicon"] = lexicon.load(tempdir / f["lexicon"])
-                feature_digitizers = utils.get_digitizers(features)
-                model = cls.default_model(**encoder_config)
+                        lexicon_filename = f"{f['name']}.lexicon"
+                        lexicon.dump(f["lexicon"], tempdir / lexicon_filename)
+                    f["lexicon"] = lexicon_filename
 
-                weights_path = tempdir / "weights.dat"
-                weights = torch.load(weights_path, map_location="cpu")
-            except FileNotFoundError as e:
-                raise InvalidModelException(f"Files missing in {model_path}") from e
-            model.load_state_dict(weights)
+                encoder_config = {
+                    "type": "elmo",
+                    "span_encoding_dim": self.model.out_dim,
+                    "hidden_dim": self.model.span_encoder.hidden_dim,
+                    "features": features_dump,
+                    "elmo_weight_file": self.elmo_weight_file,
+                    "elmo_options_file": self.elmo_options_file,
+                }
+                with open(tempdir / "config.json", "w") as config_stream:
+                    json.dump(encoder_config, config_stream)
 
+                archive = shutil.make_archive(str(tempdir), "gztar", root_dir=tempdir)
+                shutil.move(archive, path)
+
+        @classmethod
+        def load(cls, model_path: ty.Union[str, pathlib.Path]) -> "ELMoEncoder":
+            """Load a model archive."""
+            with tempfile.TemporaryDirectory() as _tempdir:
+                tempdir = pathlib.Path(_tempdir)
+                try:
+                    shutil.unpack_archive(str(model_path), tempdir, format="gztar")
+                except shutil.ReadError as e:
+                    raise InvalidModelException(f"Couldn't unpack {model_path}") from e
+                try:
+                    with open(tempdir / "config.json") as config_stream:
+                        encoder_config = config.encoder_schema.validate(
+                            json.load(config_stream)
+                        )
+                except FileNotFoundError as e:
+                    raise InvalidModelException(f"Files missing in {model_path}") from e
+                except schema.SchemaError as e:
+                    raise InvalidModelException(
+                        f"Invalid config in {model_path}"
+                    ) from e
+
+                try:
+                    features = encoder_config["features"]
+                    for f in features:
+                        digitization = f.get("digitization", None)
+                        if digitization == "lexicon":
+                            f["lexicon"] = lexicon.load(tempdir / f["lexicon"])
+                    feature_digitizers = utils.get_digitizers(features)
+                    model = cls.default_model(**encoder_config)
+
+                    weights_path = tempdir / "weights.dat"
+                    weights = torch.load(weights_path, map_location="cpu")
+                except FileNotFoundError as e:
+                    raise InvalidModelException(f"Files missing in {model_path}") from e
+                model.load_state_dict(weights)
+
+                return cls(
+                    model=model,
+                    features=features,
+                    features_digitizers=feature_digitizers,
+                    elmo_options_file=encoder_config["elmo_options_file"],
+                    elmo_weight_file=encoder_config["elmo_weight_file"],
+                )
+
+        @staticmethod
+        def default_model(
+            elmo_options_file: ty.Union[str, pathlib.Path],
+            elmo_weight_file: ty.Union[str, pathlib.Path],
+            span_encoding_dim: int,
+            hidden_dim: int,
+            features: ty.Iterable[ty.Dict[str, ty.Any]] = None,
+            embeddings: ty.Optional[torch.Tensor] = None,
+            external_boundaries: bool = False,
+            **kwargs,
+        ) -> libdecofre.FeaturefulSpanEncoder:
+            words_encoder = libdecofre.ELMoWordEncoder(
+                options_file=str(elmo_options_file), weight_file=str(elmo_weight_file)
+            )
+            featureless_span_encoder = libdecofre.SpanEncoder(
+                words_encoding_dim=words_encoder.out_dim,
+                hidden_dim=hidden_dim,
+                ffnn_dim=hidden_dim,
+                out_dim=span_encoding_dim,
+                external_boundaries=external_boundaries,
+            )
+
+            if features is None:
+                raise NotImplementedError("Featureless encoder not yet supported")
+            else:
+                # instead of just having the same initialization
+                features_lst = tuple(
+                    (f["vocabulary_size"], f["embeddings_dim"], None) for f in features
+                )
+
+                enc = libdecofre.FeaturefulSpanEncoder(
+                    tokens_encoder=words_encoder,
+                    span_encoder=featureless_span_encoder,
+                    features_encoder=libdecofre.CategoricalFeaturesBag(features_lst),
+                    out_dim=span_encoding_dim,
+                )
+                return enc
+
+        @classmethod
+        def initialize(
+            cls,
+            model_config: ty.Dict[str, ty.Any],
+            initialisation: ty.Dict[str, ty.Any],
+        ) -> "ELMoEncoder":
+            """Create a new encoder from a model config and weights/lexicons initialisation."""
+            features = config.load_features(
+                model_config.pop("features"), initialisation["lexicon-source"]
+            )
+            features_digitizers = utils.get_digitizers(features)
+            model = cls.default_model(features=features, **model_config)
             return cls(
                 model=model,
                 features=features,
-                features_digitizers=feature_digitizers,
-                elmo_options_file=encoder_config["elmo_options_file"],
-                elmo_weight_file=encoder_config["elmo_weight_file"],
+                features_digitizers=features_digitizers,
+                elmo_options_file=model_config["elmo_options_file"],
+                elmo_weight_file=model_config["elmo_weight_file"],
             )
-
-    @staticmethod
-    def default_model(
-        elmo_options_file: ty.Union[str, pathlib.Path],
-        elmo_weight_file: ty.Union[str, pathlib.Path],
-        span_encoding_dim: int,
-        hidden_dim: int,
-        features: ty.Iterable[ty.Dict[str, ty.Any]] = None,
-        embeddings: ty.Optional[torch.Tensor] = None,
-        external_boundaries: bool = False,
-        **kwargs,
-    ) -> libdecofre.FeaturefulSpanEncoder:
-        words_encoder = libdecofre.ELMoWordEncoder(
-            options_file=str(elmo_options_file), weight_file=str(elmo_weight_file)
-        )
-        featureless_span_encoder = libdecofre.SpanEncoder(
-            words_encoding_dim=words_encoder.out_dim,
-            hidden_dim=hidden_dim,
-            ffnn_dim=hidden_dim,
-            out_dim=span_encoding_dim,
-            external_boundaries=external_boundaries,
-        )
-
-        if features is None:
-            raise NotImplementedError("Featureless encoder not yet supported")
-        else:
-            # instead of just having the same initialization
-            features_lst = tuple(
-                (f["vocabulary_size"], f["embeddings_dim"], None) for f in features
-            )
-
-            enc = libdecofre.FeaturefulSpanEncoder(
-                tokens_encoder=words_encoder,
-                span_encoder=featureless_span_encoder,
-                features_encoder=libdecofre.CategoricalFeaturesBag(features_lst),
-                out_dim=span_encoding_dim,
-            )
-            return enc
-
-    @classmethod
-    def initialize(
-        cls, model_config: ty.Dict[str, ty.Any], initialisation: ty.Dict[str, ty.Any]
-    ) -> "ELMoEncoder":
-        """Create a new encoder from a model config and weights/lexicons initialisation."""
-        features = config.load_features(
-            model_config.pop("features"), initialisation["lexicon-source"]
-        )
-        features_digitizers = utils.get_digitizers(features)
-        model = cls.default_model(features=features, **model_config)
-        return cls(
-            model=model,
-            features=features,
-            features_digitizers=features_digitizers,
-            elmo_options_file=model_config["elmo_options_file"],
-            elmo_weight_file=model_config["elmo_weight_file"],
-        )
 
 
 class BERTEncoder(Encoder):

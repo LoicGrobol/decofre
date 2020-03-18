@@ -23,7 +23,10 @@ import transformers
 
 # from torch.nn.utils.rnn import pad_sequence
 
-from allennlp.modules.elmo import Elmo
+try:
+    from allennlp.modules.elmo import Elmo
+except ImportError:
+    Elmo = None
 
 
 class MaskedSequence(ty.NamedTuple):
@@ -377,20 +380,21 @@ class ContextFreeWordEncoder(torch.nn.Module):
         return WordEncoderOutput(res, seq_lens)
 
 
-class ELMoWordEncoder(torch.nn.Module):
-    def __init__(self, options_file: str, weight_file: str):
-        super().__init__()
-        self.elmo = Elmo(options_file, weight_file, 1, dropout=0)
-        self.out_dim = self.elmo.get_output_dim()
+if Elmo is not None:
+    class ELMoWordEncoder(torch.nn.Module):
+        def __init__(self, options_file: str, weight_file: str):
+            super().__init__()
+            self.elmo = Elmo(options_file, weight_file, 1, dropout=0)
+            self.out_dim = self.elmo.get_output_dim()
 
-    def forward(self, character_ids: ty.Sequence[torch.Tensor]) -> WordEncoderOutput:
-        # FIXME: this should be dealt with in digitize/collate (or should it ?)
-        padded_characters = pad_sequence(
-            [c.squeeze(0) for c in character_ids], batch_first=True
-        )
-        embeddings = self.elmo(padded_characters)
-        seq_lens = embeddings["mask"].sum(dim=-1)
-        return WordEncoderOutput(embeddings["elmo_representations"][0], seq_lens)
+        def forward(self, character_ids: ty.Sequence[torch.Tensor]) -> WordEncoderOutput:
+            # FIXME: this should be dealt with in digitize/collate (or should it ?)
+            padded_characters = pad_sequence(
+                [c.squeeze(0) for c in character_ids], batch_first=True
+            )
+            embeddings = self.elmo(padded_characters)
+            seq_lens = embeddings["mask"].sum(dim=-1)
+            return WordEncoderOutput(embeddings["elmo_representations"][0], seq_lens)
 
 
 class BERTWordEncoder(torch.nn.Module):
