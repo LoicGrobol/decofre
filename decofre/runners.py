@@ -110,21 +110,6 @@ class ClassificationMetrics(ignite.metrics.Metric):
             .item(),
         }
 
-    def custom_layout(self, prefix):
-        return {
-            **{
-                f"{prefix}/{c}": [
-                    "Multiline",
-                    [f"{prefix}/class/{c}/{name}" for name in "PR"],
-                ]
-                for c in [*self.class_names, *self.aggregates]
-            },
-            f"{prefix}/macro": [
-                "Multiline",
-                [f"{prefix}/macro/{name}" for name in "PR"],
-            ],
-        }
-
 
 def add_epoch_bar(engine: ignite.engine.Engine, mininterval: float = 1):
     @engine.on(ignite.engine.Events.EPOCH_STARTED)
@@ -247,7 +232,6 @@ class SinkTrainer(ignite.engine.Engine):
         save_path: ty.Optional[ty.Union[str, pathlib.Path]] = None,
         checkpointed_models: ty.Optional[ty.Dict[str, torch.nn.Module]] = None,
         summary_interval: ty.Optional[int] = None,
-        custom_tb_layout: ty.Optional[ty.Dict] = None,
         device: ty.Optional[torch.device] = None,
         debug: bool = False,
         load_best_after_training: bool = True,  # FIXME: temp patch
@@ -258,7 +242,6 @@ class SinkTrainer(ignite.engine.Engine):
         self.model = model
         self.loss_fun = loss_fun
         self.device = device
-        self.custom_tb_layout = custom_tb_layout
         self.debug = debug
         self.save_calls = save_calls
 
@@ -393,35 +376,6 @@ class SinkTrainer(ignite.engine.Engine):
         self.add_event_handler(CustomEvents.LOGGING, SinkTrainer._train_log_tensorboard)
         self.add_event_handler(CustomEvents.LOGGING, SinkTrainer._write_train_metrics)
 
-    def _run_once_on_dataset(self):
-        start_time = time.time()
-
-        try:
-            for batch in self.state.dataloader:
-                try:
-                    if self.should_terminate or self.should_terminate_single_epoch:
-                        self.should_terminate_single_epoch = False
-                        break
-                    self.state.batch = batch
-                    self.state.iteration += 1
-                    self._fire_event(ignite.engine.Events.ITERATION_STARTED)
-                    self.state.output = self._process_function(self, batch)
-                    self._fire_event(ignite.engine.Events.ITERATION_COMPLETED)
-                    if self.state.iteration % self.summary_interval == 0:
-                        self.fire_event(CustomEvents.LOGGING)
-
-                except BaseException as e:
-                    self._handle_exception(e)
-        except BaseException as e:
-            self.logger.error(
-                "Current epoch is terminating due to exception: %s.", str(e)
-            )
-            raise e
-
-        time_taken = time.time() - start_time
-        hours, mins, secs = _to_hours_mins_secs(time_taken)
-        return hours, mins, secs
-
     # TODO: rewrite this with the new detachable event handler API
     def run(
         self,
@@ -463,52 +417,15 @@ class SinkTrainer(ignite.engine.Engine):
         if run_name is None:
             run_name = f"run{datetime.datetime.now().isoformat(timespec='seconds')}"
 
-        self.state = ignite.engine.State(
-            dataloader=train_loader, epoch=0, max_epochs=max_epochs, metrics={}
-        )
-        self.state.tb_writer = tensorboardX.SummaryWriter(
-            logdir=str(self.save_path / "tensorboard" / run_name)
-        )
-        if self.custom_tb_layout is not None:
-            self.state.tb_writer.add_custom_scalars(self.custom_tb_layout)
+        # self.state = ignite.engine.State(
+        #     dataloader=train_loader, epoch=0, max_epochs=max_epochs, metrics={}
+        # )
+        # self.state.tb_writer = tensorboardX.SummaryWriter(
+        #     logdir=str(self.save_path / "tensorboard" / run_name)
+        # )
 
-        try:
-            self.logger.info(
-                "Engine run starting with max_epochs={}.".format(max_epochs)
-            )
-            start_time = time.time()
-            self._fire_event(ignite.engine.Events.STARTED)
-            while self.state.epoch < max_epochs and not self.should_terminate:
-                self.state.epoch += 1
-                self._fire_event(ignite.engine.Events.EPOCH_STARTED)
-                hours, mins, secs = self._run_once_on_dataset()
-                self.logger.info(
-                    "Epoch[%s] Complete. Time taken: %02d:%02d:%02d",
-                    self.state.epoch,
-                    hours,
-                    mins,
-                    secs,
-                )
-                self._fire_event(ignite.engine.Events.EPOCH_COMPLETED)
-                if dev_loader is not None:
-                    self._dev_eval(dev_loader)
-                    if stopper is not None:
-                        stopper(self)
-                if self.should_terminate:
-                    break
+        super().run(train_loader, max_epochs=max_epochs)
 
-            self._fire_event(ignite.engine.Events.COMPLETED)
-            time_taken = time.time() - start_time
-            hours, mins, secs = _to_hours_mins_secs(time_taken)
-            self.logger.info(
-                "Engine run complete. Time taken %02d:%02d:%02d" % (hours, mins, secs)
-            )
-
-        except BaseException as e:
-            self.logger.error(
-                "Engine run is terminating due to exception: %s.", str(e)
-            )
-            raise e
         self.state.train_bar.close
         self.optimizer.zero_grad()
         # Retore the model in its previous state
@@ -530,46 +447,6 @@ class SinkTrainer(ignite.engine.Engine):
             "target": target.detach(),
             "output": output.detach(),
         }
-
-    def _handle_exception(self, e):
-        if (
-            isinstance(e, KeyboardInterrupt)
-            and (self.state.iteration > 1)
-            and not self.should_terminate
-        ):
-            try:
-                # In interactive context, CTRL-C asks to save an intermediate model instead of
-                # halting alltogether. A second CTRL-C stops all
-                if sys.stdout.isatty() and self.save_calls is not None:
-                    print()
-                    while True:
-                        ans = input(
-                            "Save an intermediate step (SIGINT to abort all) [Yn] "
-                        )
-                        if not ans or "yes".startswith(ans.lower()):
-                            for c in self.save_calls:
-                                c(self.state)
-                            break
-                        elif not ans or "no".startswith(ans.lower()):
-                            return
-                        print(f"{ans!r} is not a valid answer")
-                    return
-            except KeyboardInterrupt:
-                pass
-            self.terminate()
-            logger.warning(
-                "KeyboardInterrupt caught. Saving checkpointed models before exiting"
-            )
-            self.restart_checkpointer(self, self.checkpointed_models)
-            raise e
-        else:
-            if ignite.engine.Events.EXCEPTION_RAISED in self._event_handlers:
-                self._fire_event(ignite.engine.Events.EXCEPTION_RAISED, e)
-            else:
-                self.logger.error(
-                    "Current run is terminating due to exception: %s.", str(e)
-                )
-                raise e
 
     def _epoch_init(self):
         self.model.train()
@@ -744,8 +621,6 @@ class PilotableSinkTrainer(SinkTrainer):
         self.state.tb_writer = tensorboardX.SummaryWriter(
             logdir=str(self.save_path / "tensorboard" / run_name)
         )
-        if self.custom_tb_layout is not None:
-            self.state.tb_writer.add_custom_scalars(self.custom_tb_layout)
 
         try:
             self.logger.info(
