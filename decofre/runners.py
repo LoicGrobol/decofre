@@ -347,7 +347,6 @@ class SinkTrainer(ignite.engine.Engine):
             filename_prefix="checkpoint",
             score_function=(lambda t: -self.validator.state.metrics["loss"]),
             score_name="score",
-            save_as_state_dict=True,
             create_dir=True,
             require_empty=False,
             n_saved=1,
@@ -359,7 +358,7 @@ class SinkTrainer(ignite.engine.Engine):
         def checkpoint_and_keep(validator, models):
             self.best_checkpointer(validator, models)
             # FIXME: this relies on there being only one save model
-            self.state.best_model_path = self.best_checkpointer._saved[-1][1][0]
+            self.state.best_model_path = self.best_checkpointer.last_checkpoint
 
         self.validator.add_event_handler(
             ignite.engine.Events.COMPLETED,
@@ -374,9 +373,7 @@ class SinkTrainer(ignite.engine.Engine):
         self.restart_checkpointer = ignite.handlers.ModelCheckpoint(
             dirname=self.save_path,
             filename_prefix="checkpoint",
-            save_interval=1,
             n_saved=1,
-            save_as_state_dict=True,
             create_dir=True,
             require_empty=False,
         )
@@ -421,7 +418,7 @@ class SinkTrainer(ignite.engine.Engine):
                 except BaseException as e:
                     self._handle_exception(e)
         except BaseException as e:
-            self._logger.error(
+            self.logger.error(
                 "Current epoch is terminating due to exception: %s.", str(e)
             )
             raise e
@@ -481,7 +478,7 @@ class SinkTrainer(ignite.engine.Engine):
             self.state.tb_writer.add_custom_scalars(self.custom_tb_layout)
 
         try:
-            self._logger.info(
+            self.logger.info(
                 "Engine run starting with max_epochs={}.".format(max_epochs)
             )
             start_time = time.time()
@@ -490,7 +487,7 @@ class SinkTrainer(ignite.engine.Engine):
                 self.state.epoch += 1
                 self._fire_event(ignite.engine.Events.EPOCH_STARTED)
                 hours, mins, secs = self._run_once_on_dataset()
-                self._logger.info(
+                self.logger.info(
                     "Epoch[%s] Complete. Time taken: %02d:%02d:%02d",
                     self.state.epoch,
                     hours,
@@ -508,12 +505,12 @@ class SinkTrainer(ignite.engine.Engine):
             self._fire_event(ignite.engine.Events.COMPLETED)
             time_taken = time.time() - start_time
             hours, mins, secs = _to_hours_mins_secs(time_taken)
-            self._logger.info(
+            self.logger.info(
                 "Engine run complete. Time taken %02d:%02d:%02d" % (hours, mins, secs)
             )
 
         except BaseException as e:
-            self._logger.error(
+            self.logger.error(
                 "Engine run is terminating due to exception: %s.", str(e)
             )
             raise e
@@ -594,7 +591,7 @@ class SinkTrainer(ignite.engine.Engine):
             if ignite.engine.Events.EXCEPTION_RAISED in self._event_handlers:
                 self._fire_event(ignite.engine.Events.EXCEPTION_RAISED, e)
             else:
-                self._logger.error(
+                self.logger.error(
                     "Current run is terminating due to exception: %s.", str(e)
                 )
                 raise e
@@ -718,7 +715,7 @@ class PilotableSinkTrainer(SinkTrainer):
                 except BaseException as e:
                     self._handle_exception(e)
         except BaseException as e:
-            self._logger.error(
+            self.logger.error(
                 "Current run is terminating due to exception: %s.", str(e)
             )
             raise e
@@ -776,7 +773,7 @@ class PilotableSinkTrainer(SinkTrainer):
             self.state.tb_writer.add_custom_scalars(self.custom_tb_layout)
 
         try:
-            self._logger.info(
+            self.logger.info(
                 "Engine run starting with max_epochs={}.".format(max_epochs)
             )
             start_time = time.time()
@@ -786,7 +783,7 @@ class PilotableSinkTrainer(SinkTrainer):
                 self._fire_event(ignite.engine.Events.EPOCH_STARTED)
                 hours, mins, secs = yield from self._run_once_on_dataset()
                 logger.debug(f"End epoch {self.state.epoch} for {run_name}")
-                self._logger.info(
+                self.logger.info(
                     "Epoch[%s] Complete. Time taken: %02d:%02d:%02d",
                     self.state.epoch,
                     hours,
@@ -805,12 +802,12 @@ class PilotableSinkTrainer(SinkTrainer):
             self._fire_event(ignite.engine.Events.COMPLETED)
             time_taken = time.time() - start_time
             hours, mins, secs = _to_hours_mins_secs(time_taken)
-            self._logger.info(
+            self.logger.info(
                 "Engine run complete. Time taken %02d:%02d:%02d" % (hours, mins, secs)
             )
 
         except BaseException as e:
-            self._logger.error(
+            self.logger.error(
                 "Engine run is terminating due to exception: %s.", str(e)
             )
             self._handle_exception(e)
@@ -914,7 +911,7 @@ class Evaluator(ignite.engine.Engine):
                 except BaseException as e:
                     self._handle_exception(e)
         except BaseException as e:
-            self._logger.error(
+            self.logger.error(
                 "Current run is terminating due to exception: %s.", str(e)
             )
             raise e
@@ -949,7 +946,7 @@ class Evaluator(ignite.engine.Engine):
             if ignite.engine.Events.EXCEPTION_RAISED in self._event_handlers:
                 self._fire_event(ignite.engine.Events.EXCEPTION_RAISED, e)
             else:
-                self._logger.error(
+                self.logger.error(
                     "Current run is terminating due to exception: %s.", str(e)
                 )
                 raise e
