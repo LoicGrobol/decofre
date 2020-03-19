@@ -37,11 +37,6 @@ def extract_output(output: ty.Mapping[str, ty.Any]):
     return (output["output"], output["target"])
 
 
-class SkipBatchError(Exception):
-    def __init__(self, batch):
-        self.batch = batch
-
-
 class ClassificationMetrics(ignite.metrics.Metric):
     conf: torch.Tensor
 
@@ -525,21 +520,11 @@ class SinkTrainer(ignite.engine.Engine):
         inpt, target = batch
         inpt = datatools.move(inpt, self.device)
         self.optimizer.zero_grad()
-        try:
-            target = datatools.move(target, self.device)
-            output = self.model(inpt)
-            batch_loss = self.loss_fun(output, target)
-            batch_loss.backward()
-            self.optimizer.step()
-        except RuntimeError as e:
-            if self.debug:
-                raise e
-            else:
-                logger.warning(
-                    f"Runtime Error, let's hope it's CUDA OOM and skip this batch : {e}"
-                )
-                torch.cuda.empty_cache()
-                raise SkipBatchError(batch) from e
+        target = datatools.move(target, self.device)
+        output = self.model(inpt)
+        batch_loss = self.loss_fun(output, target)
+        batch_loss.backward()
+        self.optimizer.step()
         return {
             "loss": batch_loss.item(),
             "target": target.detach(),
@@ -577,16 +562,6 @@ class SinkTrainer(ignite.engine.Engine):
             )
             self.restart_checkpointer(self, self.checkpointed_models)
             raise e
-        elif isinstance(e, SkipBatchError):
-            log_path = self.save_path / "skipped_batch.log"
-            if self.debug:
-                logger.debug(f"Logging skipped batch to {log_path}")
-                with open(log_path, "a") as errlog:
-                    cause = e.__cause__
-                    errlog.write(f"## {type(cause).__name__}\n{cause}\n")
-                    errlog.write(str(e.batch))
-                    errlog.write("\n")
-                raise e
         else:
             if ignite.engine.Events.EXCEPTION_RAISED in self._event_handlers:
                 self._fire_event(ignite.engine.Events.EXCEPTION_RAISED, e)
@@ -939,9 +914,6 @@ class Evaluator(ignite.engine.Engine):
             self.terminate()
             logger.warning("KeyboardInterrupt caught")
             raise e
-        elif isinstance(e, SkipBatchError):
-            cause = e.__cause__
-            logger.debug(f"Skipped batch due to {type(cause).__name__}: {cause}")
         else:
             if ignite.engine.Events.EXCEPTION_RAISED in self._event_handlers:
                 self._fire_event(ignite.engine.Events.EXCEPTION_RAISED, e)
