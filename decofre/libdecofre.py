@@ -471,7 +471,7 @@ class BERTWordEncoder(torch.nn.Module):
                 f"Loading unknown model type {type(self.model)}, defaulting to BERT config"
             )
             self.hidden_state_indice_in_output = 2
-        
+
         # We can't use layer drop when combining and quite frankly we should not use it in any case.
         if isinstance(self.model, transformers.FlaubertModel):
             self.model.layerdrop = 0.0
@@ -545,7 +545,6 @@ class BERTWordEncoder(torch.nn.Module):
         for i, l in enumerate(seq_lens):
             mask[i, l:] = 0.0
         return mask
-    
 
 
 class FeaturefulWordEncoder(torch.nn.Module):
