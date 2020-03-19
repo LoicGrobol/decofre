@@ -12,6 +12,7 @@ import torch.nn
 import torch.nn.functional
 import torch.nn.parallel
 
+from loguru import logger
 from torch.nn.utils.rnn import pad_sequence
 from typing_extensions import Final, Literal
 
@@ -381,13 +382,16 @@ class ContextFreeWordEncoder(torch.nn.Module):
 
 
 if Elmo is not None:
+
     class ELMoWordEncoder(torch.nn.Module):
         def __init__(self, options_file: str, weight_file: str):
             super().__init__()
             self.elmo = Elmo(options_file, weight_file, 1, dropout=0)
             self.out_dim = self.elmo.get_output_dim()
 
-        def forward(self, character_ids: ty.Sequence[torch.Tensor]) -> WordEncoderOutput:
+        def forward(
+            self, character_ids: ty.Sequence[torch.Tensor]
+        ) -> WordEncoderOutput:
             # FIXME: this should be dealt with in digitize/collate (or should it ?)
             padded_characters = pad_sequence(
                 [c.squeeze(0) for c in character_ids], batch_first=True
@@ -430,7 +434,7 @@ class BERTWordEncoder(torch.nn.Module):
     Notes
     =====
 
-    Using `AutoModel` requires special handling of configurations an is special-cased here, so
+    Using `AutoModel` requires special handling of configurations and is special-cased here, so
     proceed with caution if you want to subclass it.
 
     """
@@ -446,7 +450,8 @@ class BERTWordEncoder(torch.nn.Module):
         super().__init__()
         output_hidden_states = combine_layers is not None
         if model_class is None or model_class == transformers.AutoModel:
-            # For automodels, we have to load the config first, see <https://github.com/huggingface/transformers/issues/2694>
+            # For automodels, we have to load the config first, see
+            # <https://github.com/huggingface/transformers/issues/2694>
             model_config = transformers.AutoConfig.from_pretrained(
                 model_name_or_path, output_hidden_states=output_hidden_states
             )
@@ -457,6 +462,20 @@ class BERTWordEncoder(torch.nn.Module):
             self.model = model_class.from_pretrained(
                 model_name_or_path, output_hidden_states=output_hidden_states
             )
+        if isinstance(self.model, transformers.BertModel):
+            self.hidden_state_indice_in_output = 2
+        elif isinstance(self.model, transformers.XLMModel):
+            self.hidden_state_indice_in_output = 1
+        else:
+            logger.warning(
+                f"Loading unknown model type {type(self.model)}, defaulting to BERT config"
+            )
+            self.hidden_state_indice_in_output = 2
+        
+        # We can't use layer drop when combining and quite frankly we should not use it in any case.
+        if isinstance(self.model, transformers.FlaubertModel):
+            self.model.layerdrop = 0.0
+
         self.out_dim = self.model.config.hidden_size
         self.fine_tune = fine_tune
         # Normalize indices
@@ -486,8 +505,8 @@ class BERTWordEncoder(torch.nn.Module):
         else:
             self.output_projection = torch.nn.Identity()
         if not self.fine_tune:
+            self.model.eval()
             for param in self.model.parameters():
-
                 param.requires_grad = False
 
     @torch.jit.ignore
@@ -502,7 +521,7 @@ class BERTWordEncoder(torch.nn.Module):
         if self.combine_layers is None:
             embeddings = model_out[0]
         else:
-            layers_out = model_out[2]
+            layers_out = model_out[self.hidden_state_indice_in_output]
             extracted_layers = torch.stack(
                 [layers_out[n] for n in self.combine_layers], dim=0
             )
@@ -513,12 +532,20 @@ class BERTWordEncoder(torch.nn.Module):
         out = self.output_projection(embeddings)
         return WordEncoderOutput(out, seq_lens)
 
+    def train(self, mode=True):
+        res = super().train(mode)
+        if not self.fine_tune:
+            self.model.eval()
+        logger.debug(f"train: {self.model.training}")
+        return res
+
     @classmethod
     def make_attention_mask(cls, seq_lens: torch.Tensor) -> torch.Tensor:
         mask = torch.ones((seq_lens.shape[0], seq_lens.max()), dtype=torch.float64)
         for i, l in enumerate(seq_lens):
             mask[i, l:] = 0.0
         return mask
+    
 
 
 class FeaturefulWordEncoder(torch.nn.Module):
