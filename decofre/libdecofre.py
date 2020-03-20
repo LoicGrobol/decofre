@@ -411,7 +411,6 @@ class BERTWordEncoder(torch.nn.Module):
     :model_class: the class of model to load, defaults to `transformers.AutoModel`.
     :fine_tune: whether to fine-tune the parameters that are already pretrained
       (ie those of the base pretrained model)
-    :fine_tune: if true, make the transformer parameters trainable by default
     :combine_layers: a list of layer indices. If given, the output will be a scaled scalar mix (à la
       ELMo) of these layers. The layer weights and the scales are trainable parameters.
     :project: whether to apply a trainable linear projection to the outputs of the model
@@ -427,7 +426,7 @@ class BERTWordEncoder(torch.nn.Module):
 
     :out: a `FloatTensor` of shape `(batch_size, max_seq_len, features)` containing the batched,
       0-right-padded output of the model (ie the raw hidden states of the transformer, possibly
-      projectyed, possibly combined depending on the settings)
+      projected, possibly combined depending on the settings)
     :seq_lens: a `LongTensor` of shape `(batch_size,)` containing the true length of the input
       sequences, suitable for `pack_padded_sequence`.
 
@@ -500,6 +499,7 @@ class BERTWordEncoder(torch.nn.Module):
                 torch.tensor([1.0]), requires_grad=False
             )
         self.project = project
+        self.output_projection: torch.nn.Module
         if self.project:
             self.output_projection = torch.nn.Linear(self.out_dim, self.out_dim)
         else:
@@ -536,7 +536,6 @@ class BERTWordEncoder(torch.nn.Module):
         res = super().train(mode)
         if not self.fine_tune:
             self.model.eval()
-        logger.debug(f"train: {self.model.training}")
         return res
 
     @classmethod
