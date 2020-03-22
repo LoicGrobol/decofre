@@ -5,7 +5,6 @@ import datetime
 import enum
 import math
 import pathlib
-import sys
 import time
 
 import itertools as it
@@ -235,7 +234,9 @@ class SinkTrainer(ignite.engine.Engine):
         device: ty.Optional[torch.device] = None,
         debug: bool = False,
         load_best_after_training: bool = True,  # FIXME: temp patch
-        save_calls: ty.Optional[ty.Collection[ty.Callable[[ignite.engine.State]]]] = None,
+        save_calls: ty.Optional[
+            ty.Collection[ty.Callable[[ignite.engine.State]]]
+        ] = None,
     ):
         super().__init__(SinkTrainer._train_and_store_loss)
         self.register_events(*CustomEvents)
@@ -300,9 +301,9 @@ class SinkTrainer(ignite.engine.Engine):
         self.add_event_handler(
             ignite.engine.Events.EPOCH_STARTED, SinkTrainer._epoch_init
         )
-        self.add_event_handler(
-            ignite.engine.Events.EPOCH_COMPLETED, SinkTrainer._write_train_metrics
-        )
+        # self.add_event_handler(
+        #     ignite.engine.Events.EPOCH_COMPLETED, SinkTrainer._write_train_metrics
+        # )
         self.add_event_handler(
             ignite.engine.Events.STARTED, SinkTrainer._setup_train_bar
         )
@@ -333,14 +334,9 @@ class SinkTrainer(ignite.engine.Engine):
             ignite.engine.Events.COMPLETED, self._write_validation_metrics
         )
 
-        def checkpoint_and_keep(validator, models):
-            self.best_checkpointer(validator, models)
-            # FIXME: this relies on there being only one save model
-            self.state.best_model_path = self.best_checkpointer.last_checkpoint
-
         self.validator.add_event_handler(
             ignite.engine.Events.COMPLETED,
-            checkpoint_and_keep,
+            self.best_checkpointer,
             self.checkpointed_models,
         )
         if load_best_after_training:
@@ -373,8 +369,8 @@ class SinkTrainer(ignite.engine.Engine):
                 SinkTrainer._update_epoch_bar_desc,
             )
 
-        self.add_event_handler(CustomEvents.LOGGING, SinkTrainer._train_log_tensorboard)
-        self.add_event_handler(CustomEvents.LOGGING, SinkTrainer._write_train_metrics)
+        # self.add_event_handler(CustomEvents.LOGGING, SinkTrainer._train_log_tensorboard)
+        # self.add_event_handler(CustomEvents.LOGGING, SinkTrainer._write_train_metrics)
 
     # TODO: rewrite this with the new detachable event handler API
     def run(
@@ -402,6 +398,18 @@ class SinkTrainer(ignite.engine.Engine):
         old_device = next(self.model.parameters()).device
         self.model.to(self.device)
         logger.debug(f"Training on {next(self.model.parameters()).device}")
+        handlers = []
+
+        if run_name is None:
+            run_name = f"run{datetime.datetime.now().isoformat(timespec='seconds')}"
+        
+        def setup_state(engine):
+            self.run_name = run_name
+            self.state.tb_writer = tensorboardX.SummaryWriter(
+                logdir=str(self.save_path / "tensorboard" / run_name)
+            )
+
+        handlers.append(self.add_event_handler(ignite.engine.Events.STARTED, setup_state))
 
         if patience is not None:
             stopper = ignite.handlers.EarlyStopping(
@@ -409,24 +417,23 @@ class SinkTrainer(ignite.engine.Engine):
                 score_function=(lambda t: -t.state.metrics["dev_loss"]),
                 trainer=self,
             )
-        else:
-            stopper = None
 
         add_epoch_bar(self, mininterval=0.1 if self.debug else 2.0)
 
-        if run_name is None:
-            run_name = f"run{datetime.datetime.now().isoformat(timespec='seconds')}"
-
-        # self.state = ignite.engine.State(
-        #     dataloader=train_loader, epoch=0, max_epochs=max_epochs, metrics={}
-        # )
-        # self.state.tb_writer = tensorboardX.SummaryWriter(
-        #     logdir=str(self.save_path / "tensorboard" / run_name)
-        # )
+        if dev_loader is not None:
+            handlers.append(
+                self.add_event_handler(
+                    ignite.engine.Events.EPOCH_COMPLETED,
+                    type(self)._dev_eval,
+                    dev_loader,
+                )
+            )
 
         super().run(train_loader, max_epochs=max_epochs)
 
-        self.state.train_bar.close
+        for h in handlers:
+            h.remove()
+
         self.optimizer.zero_grad()
         # Retore the model in its previous state
         self.model.train(old_mode)
@@ -521,9 +528,9 @@ class SinkTrainer(ignite.engine.Engine):
 
     def _load_best(self):
         logger.debug(
-            f"Loading the dev-best parameters from {self.state.best_model_path}"
+            f"Loading the dev-best parameters from {self.best_checkpointer.last_checkpoint}"
         )
-        best_state_dict = torch.load(self.state.best_model_path)
+        best_state_dict = torch.load(self.best_checkpointer.last_checkpoint)
         self.model.load_state_dict(best_state_dict)
 
     def _setup_train_bar(self):
@@ -657,9 +664,7 @@ class PilotableSinkTrainer(SinkTrainer):
             )
 
         except BaseException as e:
-            self.logger.error(
-                "Engine run is terminating due to exception: %s.", str(e)
-            )
+            self.logger.error("Engine run is terminating due to exception: %s.", str(e))
             self._handle_exception(e)
         self.state.train_bar.close
         self.optimizer.zero_grad()
