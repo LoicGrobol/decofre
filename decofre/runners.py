@@ -246,6 +246,8 @@ class SinkTrainer(ignite.engine.Engine):
         self.debug = debug
         self.save_calls = save_calls
 
+        add_epoch_bar(self, mininterval=0.1 if self.debug else 2.0)
+
         if summary_interval is None:
             if self.debug:
                 self.summary_interval = 1
@@ -380,6 +382,9 @@ class SinkTrainer(ignite.engine.Engine):
         patience: ty.Optional[int] = None,
         dev_loader: ty.Optional[torch.utils.data.DataLoader] = None,
         run_name: ty.Optional[str] = None,
+        stopping_criterion: ty.Callable[[Evaluator], ty.Any] = (
+            lambda t: -t.state.metrics["dev_loss"]
+        ),
     ):
         """Train on a dataset
 
@@ -398,40 +403,42 @@ class SinkTrainer(ignite.engine.Engine):
         old_device = next(self.model.parameters()).device
         self.model.to(self.device)
         logger.debug(f"Training on {next(self.model.parameters()).device}")
-        handlers = []
+        run_handlers = []
 
         if run_name is None:
             run_name = f"run{datetime.datetime.now().isoformat(timespec='seconds')}"
-        
-        def setup_state(engine):
+
+        def setup_extra_state(engine):
             self.run_name = run_name
             self.state.tb_writer = tensorboardX.SummaryWriter(
                 logdir=str(self.save_path / "tensorboard" / run_name)
             )
 
-        handlers.append(self.add_event_handler(ignite.engine.Events.STARTED, setup_state))
-
-        if patience is not None:
-            stopper = ignite.handlers.EarlyStopping(
-                patience=patience,
-                score_function=(lambda t: -t.state.metrics["dev_loss"]),
-                trainer=self,
-            )
-
-        add_epoch_bar(self, mininterval=0.1 if self.debug else 2.0)
+        run_handlers.append(
+            self.add_event_handler(ignite.engine.Events.STARTED, setup_extra_state)
+        )
 
         if dev_loader is not None:
-            handlers.append(
+            run_handlers.append(
                 self.add_event_handler(
                     ignite.engine.Events.EPOCH_COMPLETED,
                     type(self)._dev_eval,
                     dev_loader,
                 )
             )
+            if patience is not None:
+                stopper = ignite.handlers.EarlyStopping(
+                    patience=patience, score_function=stopping_criterion, trainer=self,
+                )
+                run_handlers.append(
+                    self.validator.add_event_handler(
+                        ignite.engine.Events.COMPLETED, stopper
+                    )
+                )
 
         super().run(train_loader, max_epochs=max_epochs)
 
-        for h in handlers:
+        for h in run_handlers:
             h.remove()
 
         self.optimizer.zero_grad()
