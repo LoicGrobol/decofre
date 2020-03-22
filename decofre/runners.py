@@ -303,9 +303,9 @@ class SinkTrainer(ignite.engine.Engine):
         self.add_event_handler(
             ignite.engine.Events.EPOCH_STARTED, SinkTrainer._epoch_init
         )
-        # self.add_event_handler(
-        #     ignite.engine.Events.EPOCH_COMPLETED, SinkTrainer._write_train_metrics
-        # )
+        self.add_event_handler(
+            ignite.engine.Events.EPOCH_COMPLETED, SinkTrainer._write_train_metrics
+        )
         self.add_event_handler(
             ignite.engine.Events.STARTED, SinkTrainer._setup_train_bar
         )
