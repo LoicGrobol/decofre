@@ -249,7 +249,7 @@ class SpansDataset(LmdbDataset):
         pbar = tqdm.tqdm(json_files, unit="files", leave=False, disable=None)
         for f in pbar:
             pbar.set_description(f"Loading {f.name}")
-            with open(f) as in_stream:
+            with open(f, "rb") as in_stream:
                 data = orjson.loads(in_stream.read())
                 res.add_data(data)
         logger.debug(f"Loaded {res._len} samples in db at {res.db_path}")
@@ -483,7 +483,7 @@ class AntecedentsDataset(LmdbDataset):
         pbar = tqdm.tqdm(json_files, unit="files", leave=False, disable=None)
         for f in pbar:
             pbar.set_description(f"Loading {f.name}")
-            with open(f) as in_stream:
+            with open(f, "rb") as in_stream:
                 data = orjson.loads(in_stream.read())
             mentions = {k: span_digitizer(v) for k, v in data["mentions"].items()}
             antecedents = dict()
