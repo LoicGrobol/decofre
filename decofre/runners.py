@@ -301,16 +301,16 @@ class SinkTrainer(ignite.engine.Engine):
         )
 
         self.add_event_handler(
-            ignite.engine.Events.EPOCH_STARTED, SinkTrainer._epoch_init
+            ignite.engine.Events.EPOCH_STARTED, type(self)._epoch_init
         )
         self.add_event_handler(
-            ignite.engine.Events.EPOCH_COMPLETED, SinkTrainer._write_train_metrics
+            ignite.engine.Events.EPOCH_COMPLETED, type(self)._write_train_metrics
         )
         self.add_event_handler(
-            ignite.engine.Events.STARTED, SinkTrainer._setup_train_bar
+            ignite.engine.Events.STARTED, type(self)._setup_train_bar
         )
         self.add_event_handler(
-            ignite.engine.Events.COMPLETED, SinkTrainer._teardown_train_bar
+            ignite.engine.Events.COMPLETED, type(self)._teardown_train_bar
         )
 
         dev_metrics = dev_metrics if dev_metrics is not None else dict()
@@ -343,7 +343,7 @@ class SinkTrainer(ignite.engine.Engine):
         )
         if load_best_after_training:
             self.add_event_handler(
-                ignite.engine.Events.COMPLETED, SinkTrainer._load_best
+                ignite.engine.Events.COMPLETED, type(self)._load_best
             )
 
         self.restart_checkpointer = ignite.handlers.ModelCheckpoint(
@@ -360,10 +360,10 @@ class SinkTrainer(ignite.engine.Engine):
         )
 
         self.add_event_handler(
-            ignite.engine.Events.ITERATION_COMPLETED, SinkTrainer._update_bars
+            ignite.engine.Events.ITERATION_COMPLETED, type(self)._update_bars
         )
         self.add_event_handler(
-            ignite.engine.Events.EPOCH_COMPLETED, SinkTrainer._epoch_feedback
+            ignite.engine.Events.EPOCH_COMPLETED, type(self)._epoch_feedback
         )
         if debug:
             self.add_event_handler(
@@ -371,8 +371,14 @@ class SinkTrainer(ignite.engine.Engine):
                 SinkTrainer._update_epoch_bar_desc,
             )
 
-        # self.add_event_handler(CustomEvents.LOGGING, SinkTrainer._train_log_tensorboard)
-        # self.add_event_handler(CustomEvents.LOGGING, SinkTrainer._write_train_metrics)
+        self.add_event_handler(
+            ignite.engine.Events.ITERATION_COMPLETED(every=self.summary_interval),
+            type(self)._train_log_tensorboard,
+        )
+        self.add_event_handler(
+            ignite.engine.Events.ITERATION_COMPLETED(every=self.summary_interval),
+            type(self)._write_train_metrics,
+        )
 
     # TODO: rewrite this with the new detachable event handler API
     def run(
