@@ -197,10 +197,6 @@ def train_det(
         train_metrics={"classif": train_classif},
         dev_metrics={"classif": dev_classif},
         save_path=out_dir,
-        custom_tb_layout={
-            "train": train_classif.custom_layout("train/classif"),
-            "validation": train_classif.custom_layout("validation/classif"),
-        },
         device=device,
         debug=debug,
         **kwargs,
