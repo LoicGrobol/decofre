@@ -190,7 +190,7 @@ def write_parameters_and_gradients(
 
 # TODO: fix docstring
 # TODO: allow using multiple dev_metrics
-# TODO: the error management facilities should be upstreamed to ignite, vf is ok with it
+# TODO: add user interaction
 class SinkTrainer(ignite.engine.Engine):
     """A full-featured trainer
 
@@ -380,7 +380,6 @@ class SinkTrainer(ignite.engine.Engine):
             type(self)._write_train_metrics,
         )
 
-    # TODO: rewrite this with the new detachable event handler API
     def run(
         self,
         train_loader: ty.Iterable,
@@ -561,178 +560,6 @@ class SinkTrainer(ignite.engine.Engine):
 
     def _teardown_train_bar(self):
         self.state.train_bar.close()
-
-
-class PilotableSinkTrainer(SinkTrainer):
-    """A `SinkTraine` that can be ran step by step."""
-
-    def _run_once_on_dataset(self):
-        start_time = time.time()
-
-        try:
-            for batch in self.state.dataloader:
-                try:
-                    if self.should_terminate or self.should_terminate_single_epoch:
-                        self.should_terminate_single_epoch = False
-                        break
-                    self.state.batch = batch
-                    self.state.iteration += 1
-                    self._fire_event(ignite.engine.Events.ITERATION_STARTED)
-                    self.state.output = self._process_function(self, batch)
-                    self._fire_event(ignite.engine.Events.ITERATION_COMPLETED)
-                    if self.state.iteration % self.summary_interval == 0:
-                        self.fire_event(CustomEvents.LOGGING)
-                    yield
-
-                except BaseException as e:
-                    self._handle_exception(e)
-        except BaseException as e:
-            self.logger.error(
-                "Current run is terminating due to exception: %s.", str(e)
-            )
-            raise e
-
-        time_taken = time.time() - start_time
-        hours, mins, secs = _to_hours_mins_secs(time_taken)
-        return hours, mins, secs
-
-    def run(
-        self,
-        train_loader: ty.Iterable,
-        max_epochs: int,
-        patience: ty.Optional[int] = None,
-        dev_loader: ty.Optional[torch.utils.data.DataLoader] = None,
-        run_name: ty.Optional[str] = None,
-    ):
-        """Train on a dataset
-
-        ## Parameters
-        - `train_loader`: loader of training samples
-        - `max_epochs`: the maximum number of pass over the dataset
-        - `dev_loader`: loader of samples used for feedback during training,
-          disabled if `None` (default)
-        - `patience`: the number of epochs to wait for an improvement
-          in `dev_loss`
-          before stopping training prematurely
-        - `run_name`: the name of the run in tensorboard
-        """
-
-        old_mode = self.model.training
-        old_device = next(self.model.parameters()).device
-        self.model.to(self.device)
-
-        if patience is not None:
-            stopper = ignite.handlers.EarlyStopping(
-                patience=patience,
-                score_function=(lambda t: -t.state.metrics["dev_loss"]),
-                trainer=self,
-            )
-        else:
-            stopper = None
-
-        add_epoch_bar(self, mininterval=0.1 if self.debug else 2.0)
-
-        if run_name is None:
-            run_name = f"run{datetime.datetime.now().isoformat(timespec='seconds')}"
-
-        self.state = ignite.engine.State(
-            dataloader=train_loader, epoch=0, max_epochs=max_epochs, metrics={}
-        )
-        self.state.tb_writer = tensorboardX.SummaryWriter(
-            logdir=str(self.save_path / "tensorboard" / run_name)
-        )
-
-        try:
-            self.logger.info(
-                "Engine run starting with max_epochs={}.".format(max_epochs)
-            )
-            start_time = time.time()
-            self._fire_event(ignite.engine.Events.STARTED)
-            while self.state.epoch < max_epochs and not self.should_terminate:
-                self.state.epoch += 1
-                self._fire_event(ignite.engine.Events.EPOCH_STARTED)
-                hours, mins, secs = yield from self._run_once_on_dataset()
-                logger.debug(f"End epoch {self.state.epoch} for {run_name}")
-                self.logger.info(
-                    "Epoch[%s] Complete. Time taken: %02d:%02d:%02d",
-                    self.state.epoch,
-                    hours,
-                    mins,
-                    secs,
-                )
-                self._fire_event(ignite.engine.Events.EPOCH_COMPLETED)
-                if dev_loader is not None:
-                    self._dev_eval(dev_loader)
-                    if stopper is not None:
-                        stopper(self)
-                if self.should_terminate:
-                    logger.debug(f"Forcibly terminating {run_name}")
-                    break
-
-            self._fire_event(ignite.engine.Events.COMPLETED)
-            time_taken = time.time() - start_time
-            hours, mins, secs = _to_hours_mins_secs(time_taken)
-            self.logger.info(
-                "Engine run complete. Time taken %02d:%02d:%02d" % (hours, mins, secs)
-            )
-
-        except BaseException as e:
-            self.logger.error("Engine run is terminating due to exception: %s.", str(e))
-            self._handle_exception(e)
-        self.state.train_bar.close
-        self.optimizer.zero_grad()
-        # Retore the model in its previous state
-        self.model.train(old_mode)
-        self.model.to(old_device)
-        return self.state
-
-
-def run_multi(
-    tasks: ty.Mapping[
-        str, ty.Tuple[PilotableSinkTrainer, ty.Iterable, ty.Dict[str, ty.Any]]
-    ],
-    steps_per_task: ty.Optional[ty.Mapping[str, int]] = None,
-) -> ty.Dict[str, ignite.engine.State]:
-    """Run several `PilotableSinkTrainer`s in parallel
-
-    This works by cycling through the trainers, runnning one (or more,, see
-    #Arguments) step of each. When one trainers ends, all are forcibly stopped
-    by setting `should_terminate` to `True`.
-
-    ## Arguments
-      - `task` A mapping from tasks names to (trainer, dataset, kwargs) tuples
-      - `steps_per_task` A mapping from task names to the number of steps
-        to run on the corresponding tasks before switching to the next one,
-        defaults to 1 for every task
-
-    ## Return
-      - `states`: A mapping from task names to the final trainer state.
-    """
-    if steps_per_task is None:
-        steps_per_task = {t: 1 for t in tasks}
-    runs = {t: r.run(l, **kwargs) for t, (r, l, kwargs) in tasks.items()}
-    while True:
-        try:
-            for (
-                task,
-                run,
-            ) in runs.items():  # The order should be deterministic as of python 3.7
-                for _ in range(steps_per_task[task]):
-                    next(run)
-        except StopIteration as e:
-            logger.debug(f"{task!r} run ended, terminating the other tasks")
-            states = {task: e.value}
-            for t, (r, l, k) in tasks.items():
-                if t == task:
-                    continue
-                logger.debug(f"Terminating {t!r}")
-                r.should_terminate = True
-                try:
-                    next(runs[t])
-                except StopIteration as e:
-                    states[t] = e.value
-            break
-    return states
 
 
 class Evaluator(ignite.engine.Engine):

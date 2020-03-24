@@ -233,7 +233,9 @@ def main_entry_point(argv=None):
     if train_config["training-scheme"]["type"] == "sequential":
         from decofre.training import sequential as training_scheme
     elif train_config["training-scheme"]["type"] == "quasisimultaneous":
-        from decofre.training import quasisimultaneous as training_scheme
+        raise NotImplementedError(
+            "Quasisimultaneous training scheme currently unavailable, bear with us!"
+        )
     else:
         raise ValueError(f'Unknown training scheme {train_config["training-scheme"]}')
     training_scheme.train(

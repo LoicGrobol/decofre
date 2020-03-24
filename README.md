@@ -38,7 +38,7 @@ Its output is still rather crude and mostly meant for demonstration purpose.
 
 ### Downloading ANCOR
 
-So far the only corpus we officially support (more in preparation, along with an easier preparing
+So far the only corpus we officially support (more in preparation, along with an easier bootstrap
 procedure).
 
 -  Clone this repo `git clone https://github.com/LoicGrobol/decofre && cd decofre`
