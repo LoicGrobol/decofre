@@ -1058,16 +1058,15 @@ def slack_rescaled_max_margin(
 @torch.jit.script
 def weighted_nll_loss(inpt: torch.Tensor, target: torch.Tensor, weight: torch.Tensor):
     """What `torch.nll_loss` with `reduction='weighted_average'` should be"""
-    return (
-        torch.nn.functional.nll_loss(inpt, target, weight=weight, reduction="sum")
-        / weight.take(target).sum()
-    )
+    return torch.nn.functional.nll_loss(
+        inpt, target, weight=weight, reduction="sum"
+    ).true_divide(weight.take(target).sum())
 
 
 @torch.jit.script
 def averaged_nll_loss(inpt: torch.Tensor, target: torch.Tensor, weight: torch.Tensor):
     """`torch.nll_loss` with `reduction='sum'` divided by batch len"""
-    return (
-        torch.nn.functional.nll_loss(inpt, target, weight=weight, reduction="sum")
-        / target.numel()
-    )
+    return torch.nn.functional.nll_loss(
+        inpt, target, weight=weight, reduction="sum"
+    ).true_divide(target.numel())
+

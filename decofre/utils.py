@@ -53,9 +53,9 @@ def PRF(confusion_matrix: torch.Tensor) -> torch.Tensor:
     tp = torch.diagonal(confusion_matrix).float()
     pos = confusion_matrix.sum(dim=1).float()
     tru = confusion_matrix.sum(dim=0).float()
-    P = tp / pos
-    R = tp / tru
-    F = 2 * tp / (pos + tru)
+    P = tp.true_divide(pos)
+    R = tp.true_divide(tru)
+    F = 2 * tp.true_divide(pos + tru)
     prf = torch.stack((P, R, F)).t()
     # Edge case: if any of this metric is NaN, it is because
     # it was a 0/0 case. In which case it was perfectly accurate

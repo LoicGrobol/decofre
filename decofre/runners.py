@@ -766,7 +766,7 @@ class MultiLoss(ignite.metrics.Metric):
             self._num_examples.add_(counts)
 
     def compute(self):
-        final_loss = self._sum / self._num_examples.to(dtype=torch.float)
+        final_loss = self._sum.true_divide(self._num_examples.to(dtype=torch.float))
         if self.loss_names is not None:
             return dict(zip(self.loss_names, final_loss.tolist()))
         return final_loss
