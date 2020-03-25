@@ -231,7 +231,6 @@ class SinkTrainer(ignite.engine.Engine):
         save_path: ty.Optional[ty.Union[str, pathlib.Path]] = None,
         checkpointed_models: ty.Optional[ty.Dict[str, torch.nn.Module]] = None,
         summary_interval: ty.Optional[int] = None,
-        device: ty.Optional[torch.device] = None,
         debug: bool = False,
         load_best_after_training: bool = True,  # FIXME: temp patch
         save_calls: ty.Optional[
@@ -242,9 +241,14 @@ class SinkTrainer(ignite.engine.Engine):
         self.register_events(*CustomEvents)
         self.model = model
         self.loss_fun = loss_fun
-        self.device = device
         self.debug = debug
         self.save_calls = save_calls
+        model_devices = set(p.device for p in model.parameters())
+        if len(model_devices) > 1:
+            raise ValueError(
+                "Models opretating on more than one device are not supported"
+            )
+        self.device = next(iter(model_devices))
 
         add_epoch_bar(self, mininterval=0.1 if self.debug else 2.0)
 
@@ -322,7 +326,7 @@ class SinkTrainer(ignite.engine.Engine):
         else:
             dev_loss = loss_fun
 
-        self.validator = Evaluator(self.model, dev_loss, dev_metrics, self.device)
+        self.validator = Evaluator(self.model, dev_loss, dev_metrics)
         self.best_checkpointer = ignite.handlers.ModelCheckpoint(
             dirname=self.save_path,
             filename_prefix="checkpoint",
@@ -405,9 +409,6 @@ class SinkTrainer(ignite.engine.Engine):
         """
 
         old_mode = self.model.training
-        old_device = next(self.model.parameters()).device
-        self.model.to(self.device)
-        logger.debug(f"Training on {next(self.model.parameters()).device}")
         run_handlers = []
 
         if run_name is None:
@@ -449,7 +450,6 @@ class SinkTrainer(ignite.engine.Engine):
         self.optimizer.zero_grad()
         # Retore the model in its previous state
         self.model.train(old_mode)
-        self.model.to(old_device)
         return self.state
 
     def _train_and_store_loss(self, batch):
@@ -574,11 +574,15 @@ class Evaluator(ignite.engine.Engine):
         model: torch.nn.Module,
         loss: ty.Callable,
         metrics: ty.Optional[ty.Mapping[str, ignite.metrics.Metric]] = None,
-        device: ty.Optional[torch.device] = None,
     ):
         super().__init__(Evaluator._inference)
         self.model = model
-        self.device = device
+        model_devices = set(p.device for p in model.parameters())
+        if len(model_devices) > 1:
+            raise ValueError(
+                "Models opretating on more than one device are not supported"
+            )
+        self.device = next(iter(model_devices))
         self.loss = ignite.metrics.Loss(
             loss, output_transform=extract_output, batch_size=len
         )
@@ -646,10 +650,7 @@ class Evaluator(ignite.engine.Engine):
     def run(self, dataloader, max_epochs=1):
         old_mode = self.model.training
         self.model.eval()
-        old_device = next(self.model.parameters()).device
-        self.model.to(self.device)
         super().run(dataloader, max_epochs)
-        self.model.to(old_device)
         self.model.train(old_mode)
         return self.state
 

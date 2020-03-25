@@ -105,6 +105,7 @@ def train_det(
     logger.info("Training mention detection")
     config = defaultdict(lambda: None, config if config is not None else dict())
     device = torch.device(device)  # type: ignore
+    model = model.to(device)
     train_set = datatools.SpansDataset.from_json(
         train_file,
         span_digitizer=span_digitizer,
@@ -197,7 +198,6 @@ def train_det(
         train_metrics={"classif": train_classif},
         dev_metrics={"classif": dev_classif},
         save_path=out_dir,
-        device=device,
         debug=debug,
         **kwargs,
     )
@@ -236,6 +236,7 @@ def evaluate_classif(
     num_workers: int = 0,
 ) -> torch.Tensor:
     """Evaluate a classification model."""
+    model = model.to(device)
 
     def loss_fun(output, target):
         return torch.nn.functional.nll_loss(
@@ -262,7 +263,6 @@ def evaluate_classif(
                     },
                 )
             },
-            device=device,
         )
         test_loader = torch.utils.data.DataLoader(
             dataset=test_set,

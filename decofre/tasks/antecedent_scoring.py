@@ -94,6 +94,7 @@ def train_cor(
     **kwargs,
 ) -> ty.Tuple[ignite.engine.Engine, ty.Iterable, ty.Dict[str, ty.Any]]:
     logger.info("Training antecedent scoring")
+    model = model.to(device)
     train_set = datatools.AntecedentsDataset.from_json(
         train_file,
         span_digitizer=span_digitizer,
@@ -168,7 +169,6 @@ def train_cor(
             ),
         },
         save_path=out_dir,
-        device=device,
         debug=debug,
         **kwargs,
     )
@@ -194,6 +194,7 @@ def evaluate_cor(
     device=None,
     num_workers: int = 0,
 ) -> ty.Tuple[torch.FloatTensor]:
+    model = model.to(device)
     with tempfile.TemporaryDirectory(prefix="decofre_antecedents_") as temp_dir:
         test_set = datatools.AntecedentsDataset.from_json(
             test_file,
@@ -243,7 +244,6 @@ def evaluate_cor(
                     ),
                 ),
             },
-            device=device,
         )
         state = evaluator.run(test_loader)
     for name, value in state.metrics.items():
