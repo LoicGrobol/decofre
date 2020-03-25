@@ -10,7 +10,6 @@ Options:
   --device <d>  The device to use for computations (defaults to `cuda:0` or `cpu`)
   --encoder <f>  Path to a serialized span encoding model to preload
   --model-config <f>  Path to a JSON model configuration
-  --log-to-stdout  Log to stdout instead of stderr to allow spurious warning filtering
   --num-workers <n>  Number of data loading workers to use [default: 0]
   --out-dir <p>  Output directory, end with `/` to make it a timestamped subdir (default:
                  decofre-<timestamp>)
@@ -110,8 +109,6 @@ signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 def main_entry_point(argv=None):
     arguments = docopt.docopt(__doc__, version=__version__, argv=argv)
     logger.remove(0)  # Don't log directly to stderr
-    if arguments["--log-to-stdout"]:
-        sys.stderr = sys.stdout
 
     if arguments["--debug"]:
         log_level = "DEBUG"
