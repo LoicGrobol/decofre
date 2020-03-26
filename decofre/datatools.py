@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import collections.abc
+import io
 import pathlib
 import pickle  # nosec
 import shutil
@@ -80,6 +81,18 @@ def move(t: ty.Union[torch.Tensor, ty.Iterable], device: ty.Union[torch.device, 
     raise TypeError(f"{type(t)} is not movable")
 
 
+def to_bytes(obj: ty.Any) -> bytes:
+    """Pickle an object to bytes using `torch.save`."""
+    res = io.BytesIO()
+    torch.save(obj, res, pickle_protocol=pickle.HIGHEST_PROTOCOL)
+    return res.getvalue()
+
+
+def load_bytes(b: bytes) -> ty.Any:
+    inpt = io.BytesIO(b)
+    return torch.load(inpt)
+
+
 # TODO: Allow dynamic map size (e.g. double when full)
 class LmdbDataset(torch.utils.data.Dataset):
     def __init__(
@@ -133,10 +146,7 @@ class LmdbDataset(torch.utils.data.Dataset):
             with env.begin(write=True, buffers=True) as txn:
                 added, consumed = txn.cursor().putmulti(
                     (
-                        (
-                            i.to_bytes(64, "big"),
-                            pickle.dumps(d, protocol=pickle.HIGHEST_PROTOCOL),
-                        )
+                        (i.to_bytes(64, "big"), to_bytes(d))
                         for i, d in enumerate(data, start=len(self))
                     ),
                     append=True,
@@ -165,9 +175,9 @@ class LmdbDataset(torch.utils.data.Dataset):
         ) as env:
             with env.begin(write=False, buffers=True) as txn:
                 if isinstance(index, int):
-                    return pickle.loads(txn.get(index.to_bytes(64, "big")))
+                    return load_bytes(txn.get(index.to_bytes(64, "big")))
                 else:
-                    return [pickle.loads(txn.get(i.to_bytes(64, "big"))) for i in index]
+                    return [load_bytes(txn.get(i.to_bytes(64, "big"))) for i in index]
 
 
 class SpansDataset(LmdbDataset):
@@ -305,7 +315,7 @@ class AntecedentsDataset(LmdbDataset):
                             (
                                 (
                                     k.encode(),
-                                    pickle.dumps(v, protocol=pickle.HIGHEST_PROTOCOL),
+                                    to_bytes(v),
                                 )
                                 for k, v in mentions.items()
                             ),
@@ -332,7 +342,7 @@ class AntecedentsDataset(LmdbDataset):
                             (
                                 (
                                     i.to_bytes(64, "big"),
-                                    pickle.dumps(
+                                    to_bytes(
                                         (
                                             m_id.encode(),
                                             tuple(
@@ -344,7 +354,6 @@ class AntecedentsDataset(LmdbDataset):
                                             ),
                                             t,
                                         ),
-                                        protocol=pickle.HIGHEST_PROTOCOL,
                                     ),
                                 )
                                 for i, (m_id, a, t) in enumerate(
@@ -407,16 +416,16 @@ class AntecedentsDataset(LmdbDataset):
             antecedents_db = env.open_db(key="antecedents_db".encode())
             with env.begin(db=antecedents_db, write=False, buffers=True) as txn:
                 loaded_indices = [
-                    pickle.loads(txn.get(i.to_bytes(64, "big"))) for i in indices
+                    load_bytes(txn.get(i.to_bytes(64, "big"))) for i in indices
                 ]
 
             with env.begin(db=mentions_db, write=False, buffers=True) as txn:
                 loaded_data = [
                     (
                         (
-                            pickle.loads(txn.get(mention)),
+                            load_bytes(txn.get(mention)),
                             tuple(
-                                (pickle.loads(txn.get(a_id)), pairs_feats)
+                                (load_bytes(txn.get(a_id)), pairs_feats)
                                 for a_id, pairs_feats in antecedents
                             ),
                         ),
