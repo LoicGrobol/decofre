@@ -392,7 +392,7 @@ class SinkTrainer(ignite.engine.Engine):
         dev_loader: ty.Optional[torch.utils.data.DataLoader] = None,
         run_name: ty.Optional[str] = None,
         stopping_criterion: ty.Callable[[Evaluator], ty.Any] = (
-            lambda t: -t.state.metrics["dev_loss"]
+            lambda t: -t.state.metrics["loss"]
         ),
     ):
         """Train on a dataset
