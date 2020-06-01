@@ -56,19 +56,16 @@ def get_clusters(tree: etree._ElementTree) -> ty.Dict[str, ty.Set[str]]:
         i = m.attrib[f"{XML}id"]
         if i not in non_sing:
             res[i] = {i}
-    a_id, b_id, intersect = next(
-        (
-            (a_id, b_id, intersect)
-            for a_id, a in res.items()
-            for b_id, b in res.items()
-            if b is not a
-            for intersect in (a.intersection(b),)
-            if intersect
-        ),
-        (None, None, None),
-    )
-    if intersect is not None:
-        raise Exception(f"Schemas {a_id} and {b_id} are not disjoints: {intersect}")
+    dupes = [
+        (a_id, b_id, intersect)
+        for a_id, a in res.items()
+        for b_id, b in res.items()
+        if b is not a
+        for intersect in (a.intersection(b),)
+        if intersect
+    ]
+    for a_id, b_id, intersect in dupes:
+        print(f"Schemas {a_id} and {b_id} are not disjoints: {intersect}")
     return res
 
 
