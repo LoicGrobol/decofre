@@ -248,10 +248,10 @@ def targets_from_span(
     end_id = target_to_id(span.attrib["to"])
     try:
         start_node = getter(start_id)
-    except KeyError as e:
-        raise ElementNotFoundError(
-            f"Span {span_id} start element not found", start_id
-        ) from e
+    except KeyError:
+        start_node = None
+    if start_node is None:
+        raise ElementNotFoundError(f"Span {span_id} start element not found", start_id)
     targets = [start_node]
     if start_id != end_id:
         last_node = start_node
@@ -511,11 +511,7 @@ def spans_from_doc(
     nlp.tokenizer = nlp.tokenizer.tokens_from_list
 
     for sent in text_doc.xpath(
-        (
-            ".//tei:text//tei:s"
-            "|.//tei:text//tei:head"
-            "|.//tei:text//tei:p"
-        ),
+        (".//tei:text//tei:s" "|.//tei:text//tei:head" "|.//tei:text//tei:p"),
         namespaces=NSMAP,
     ):
         content: ty.List[etree._Element] = list(sent.iter(*TOKEN_TAGS))
