@@ -27,6 +27,8 @@ Example:
   `democrat_spangen data/democrat/xml/tei.xml data/democrat/urs/urs.xml -m mentions.json -a antecedents.json`
 """
 
+from __future__ import annotations
+
 import dataclasses
 import math
 import contextlib
@@ -34,10 +36,7 @@ import random
 import sys
 import signal
 
-import itertools as it
 import typing as ty
-
-from collections import deque
 
 import spacy
 
@@ -70,6 +69,8 @@ IGNORED_MENTION_TYPES = frozenset(("NULL",))
 
 TOKEN_TAGS = frozenset((f"{TEI}w", f"{TEI}pc"))
 
+SENTS_XPATH = ".//tei:text//tei:s|.//tei:text//tei:head|.//tei:text//tei:p"
+
 
 class ElementNotFoundError(Exception):
     """An element is missing, optionally specify its id."""
@@ -77,54 +78,6 @@ class ElementNotFoundError(Exception):
     def __init__(self, message: str, eid: ty.Optional[str] = None):
         self.message = message
         self.eid = eid
-
-
-def generate_spans_with_context(
-    lst: ty.Iterable[T],
-    min_width: int,
-    max_width: int,
-    left_context: int = 0,
-    right_context: int = 0,
-) -> ty.Iterable[ty.Tuple[ty.Tuple[T, ...], ty.Tuple[T, ...], ty.Tuple[T, ...]]]:
-    """
-    Return an iterator over all the spans of `#lst` with width in `[min_width, max_width`] and a
-    context window.
-
-    Output
-    ------
-    An iterable of tuples `(left_context, span, right_context)`, with the context truncated at the
-    desired length
-    """
-    lst_iter = iter(lst)
-    # First gobble as many elements as needed
-    left_buffer = deque()  # type: ty.Deque[ty.Any]
-    buffer = deque(it.islice(lst_iter, max_width + right_context))
-    # Exit early if the iterable is not long enough
-    if len(buffer) < min_width:
-        return
-    for nex in lst_iter:
-        for i in range(min_width, max_width):
-            yield (
-                tuple(left_buffer),
-                tuple(it.islice(buffer, 0, i)),
-                tuple(it.islice(buffer, i, i + right_context)),
-            )
-        buffer.append(nex)
-        left_buffer.append(buffer.popleft())
-        if len(left_buffer) > left_context:
-            left_buffer.popleft()
-
-    # Empty the buffer when we have reached the end of `lst_iter`
-    while buffer:
-        for i in range(min_width, min(len(buffer) + 1, max_width)):
-            yield (
-                tuple(left_buffer),
-                tuple(it.islice(buffer, 0, i)),
-                tuple(it.islice(buffer, i, i + right_context + 1)),
-            )
-        left_buffer.append(buffer.popleft())
-        if len(left_buffer) > left_context:
-            left_buffer.popleft()
 
 
 def xmlid(e: etree._Element) -> str:
@@ -160,7 +113,7 @@ FeatureStructure = ty.Dict[str, ty.Union[str, bool, ty.Dict]]
 
 
 def parse_fs(fs: etree._Element) -> FeatureStructure:
-    """Parse a <tei:fs> element
+    """Parse a `<tei:fs>` element
 
     Note that this doesn't handle all the convoluted ways to specify fs in TEI
     but only the relatively simple subset we need here.
@@ -202,7 +155,7 @@ def get_fs(tree: etree._ElementTree) -> ty.Dict[str, FeatureStructure]:
     """Find and parse all the feature structures in `tree`.
 
     Return
-    -------
+    ======
 
     A dict mapping feature structures ids to their parsed contents.
     """
@@ -213,21 +166,6 @@ def get_fs(tree: etree._ElementTree) -> ty.Dict[str, FeatureStructure]:
         )
 
     return {xmlid(fs): parse_fs(fs) for fs in fs_lst}
-
-
-def iter_span(
-    start_node: etree._Element,
-    parent: etree._Element,
-    tags: ty.Optional[ty.Iterable[str]] = None,
-) -> ty.Generator[etree._Element, None, None]:
-    if tags is None:
-        tags = []
-    tag_set = set(tags)
-    # First find
-    for sibling in node.itersiblings():
-        for niece in sibling.iter():
-            if niece.tag in tag_set:
-                yield niece
 
 
 def targets_from_span(
@@ -420,7 +358,9 @@ def get_chains(tree: etree._ElementTree) -> ty.Dict[str, ty.Set[str]]:
     return res
 
 
-def get_tag_pos(tree: etree._ElementTree, tags: ty.Iterable[str]) -> ty.Dict[str, int]:
+def get_tag_pos(
+    tree: ty.Union[etree._Element, etree._ElementTree], tags: ty.Iterable[str]
+) -> ty.Dict[etree._Element, int]:
     """Return a dict mapping nodes of certain types to their position in the tree."""
     return {w: i for i, w in enumerate(tree.iter(*tags))}
 
@@ -493,59 +433,50 @@ def morph_from_tag(tag: str) -> ty.List[str]:
     return rest.split("|")
 
 
-def spans_from_doc(
-    text_doc: etree._ElementTree,
-    annotation_doc: etree._ElementTree,
-    min_width: int = 1,
-    max_width: int = 26,
+def spans_for_sent(
+    sent: etree._Element,
+    units: ty.Dict[ty.Tuple[etree._Element, etree._Element], Mention],
+    w_pos: ty.Dict[etree._Element, int],
+    nlp: spacy.language.Language,
+    max_width: ty.Optional[int] = 26,
     context: ty.Tuple[int, int] = (10, 10),
     length_buckets: ty.Optional[ty.Sequence[int]] = (1, 2, 3, 4, 5, 7, 15, 32, 63),
+    all_spans: bool = True,
 ) -> ty.Iterable[MentionFeaturesDict]:
-    """
-    Return all the text spans of `#doc`, with their mention type, definiteness and anaphoricity
-    (for those who are not mentions, all of these are `None`)
-    """
-    w_pos = get_tag_pos(text_doc, TOKEN_TAGS)
-    units = get_mentions(text_doc, annotation_doc)
-    nlp = spacy.load("fr_core_news_sm")
-    nlp.tokenizer = nlp.tokenizer.tokens_from_list
-
-    for sent in text_doc.xpath(
-        (".//tei:text//tei:s" "|.//tei:text//tei:head" "|.//tei:text//tei:p"),
-        namespaces=NSMAP,
-    ):
-        content: ty.List[etree._Element] = list(sent.iter(*TOKEN_TAGS))
-        processed_sent = nlp([txm_node_form(t) for t in content])
-        ent_dict = {(e[0], e[-1]): e.label_ for e in processed_sent.ents}
-        noun_chunks = sorted(processed_sent.noun_chunks)
-        spans = generate_spans_with_context(
-            zip(content, ty.cast(ty.Iterable[spacy.tokens.Token], processed_sent)),
-            min_width,
-            max_width,
-            *context,
+    sent_nodes: ty.List[etree._Element] = list(sent.iter(*TOKEN_TAGS))
+    sent_words = [txm_node_form(t) for t in sent_nodes]
+    processed_sent = nlp(sent_words)
+    ent_dict = {(e[0], e[-1]): e.label_ for e in processed_sent.ents}
+    noun_chunks = sorted(processed_sent.noun_chunks)
+    if max_width is None:
+        spans_idx = (
+            (i, j)
+            for i in range(len(sent_nodes))
+            for j in range(i + 1, len(sent_nodes) + 1)
         )
-        for left_context_t, span_t, right_context_t in spans:
-            #  FIXME: Dirty way to split out spacy processing
-            left_context, processed_left = (
-                zip(*left_context_t) if left_context_t else ([], [])
-            )
-            right_context, processed_right = (
-                zip(*right_context_t) if right_context_t else ([], [])
-            )
-            span, processed_span = zip(*span_t)
-            start_elt, end_elt = span[0], span[-1]
-            mention = units.get((start_elt, end_elt))
+    else:
+        spans_idx = (
+            (i, j)
+            for i in range(len(sent_nodes))
+            for j in range(i + 1, min(i + max_width, len(sent_nodes)) + 1)
+        )
+    for i, j in spans_idx:
+        context_start, context_end = (
+            max(0, i - context[0]),
+            min(j + context[1], len(sent_nodes)),
+        )
 
-            pos = [w.pos_ for w in (*processed_left, *processed_span, *processed_right)]
-            lemma = [
-                w.lemma_ for w in (*processed_left, *processed_span, *processed_right)
-            ]
-            morph = [
-                morph_from_tag(w.tag_)
-                for w in (*processed_left, *processed_span, *processed_right)
-            ]
-            left_context = [txm_node_form(w) for w in left_context]
-            right_context = [txm_node_form(w) for w in right_context]
+        mention = units.get((sent_nodes[i], sent_nodes[j - 1]))
+
+        if mention is not None or all_spans:
+            content = sent_words[i:j]
+            left_context = sent_words[context_start:i]
+            right_context = sent_words[j:context_end]
+            processed_context = processed_sent[context_start:context_end]
+            pos = [w.pos_ for w in processed_context]
+            lemma = [w.lemma_ for w in processed_context]
+            morph = [morph_from_tag(w.tag_) for w in processed_context]
+
             if len(left_context) < context[0]:
                 left_context.insert(0, "<start>")
                 pos.insert(0, "<start>")
@@ -557,54 +488,69 @@ def spans_from_doc(
                 lemma.append("<end>")
                 morph.append([])
 
-            content = [txm_node_form(w) for w in span]
-
             length = (
                 int(np.digitize(len(content), bins=length_buckets, right=True))
                 if length_buckets is not None
                 else len(content)
             )
-            entity_type = ent_dict.get((processed_span[0], processed_span[-1]), None)
-            chunk_inclusion = span_inclusion(processed_span, noun_chunks)
+            entity_type = ent_dict.get((processed_sent[i], processed_sent[j - 1]), None)
+            chunk_inclusion = span_inclusion(processed_sent[i:j], noun_chunks)
 
-            if mention is None:
+            common_feats = {
+                "content": content,
+                "left_context": left_context,
+                "right_context": right_context,
+                "length": length,
+                "start": w_pos[sent_nodes[i]],
+                "end": w_pos[sent_nodes[j - 1]],
+                "pos": pos,
+                "lemma": lemma,
+                "morph": morph,
+                "entity_type": entity_type,
+                "chunk_inclusion": chunk_inclusion,
+            }
+            if mention is None and all_spans:
                 yield (
-                    {
-                        "content": content,
-                        "left_context": left_context,
-                        "right_context": right_context,
-                        "length": length,
-                        "type": None,
-                        "new": None,
-                        "def": None,
-                        "id": None,
-                        "start": w_pos[span[0]],
-                        "end": w_pos[span[-1]],
-                        "pos": pos,
-                        "lemma": lemma,
-                        "morph": morph,
-                        "entity_type": entity_type,
-                        "chunk_inclusion": chunk_inclusion,
-                    }
+                    {**common_feats, "type": None, "new": None, "def": None, "id": None}
                 )
             else:
                 yield {
-                    "content": content,
-                    "left_context": left_context,
-                    "right_context": right_context,
-                    "length": length,
+                    **common_feats,
                     "type": "MENTION",
                     "new": mention.features.get("NEW", "_"),
                     "def": mention.features.get("DEF", "_"),
                     "id": mention.identifier,
-                    "start": w_pos[span[0]],
-                    "end": w_pos[span[-1]],
-                    "pos": pos,
-                    "lemma": lemma,
-                    "morph": morph,
-                    "entity_type": entity_type,
-                    "chunk_inclusion": chunk_inclusion,
                 }
+
+
+def spans_from_doc(
+    text_doc: etree._ElementTree,
+    annotation_doc: etree._ElementTree,
+    max_width: ty.Optional[int] = 26,
+    context: ty.Tuple[int, int] = (10, 10),
+    length_buckets: ty.Optional[ty.Sequence[int]] = (1, 2, 3, 4, 5, 7, 15, 32, 63),
+    all_spans: bool = True,
+) -> ty.Iterable[MentionFeaturesDict]:
+    """
+    Return all the text spans of `#doc`, with their mention type, definiteness and anaphoricity
+    (for those who are not mentions, all of these are `None`)
+    """
+    w_pos = get_tag_pos(text_doc, TOKEN_TAGS)
+    units = get_mentions(text_doc, annotation_doc)
+    nlp = spacy.load("fr_core_news_sm")
+    nlp.tokenizer = nlp.tokenizer.tokens_from_list
+
+    for sent in text_doc.xpath(SENTS_XPATH, namespaces=NSMAP,):
+        yield from spans_for_sent(
+            sent=sent,
+            units=units,
+            w_pos=w_pos,
+            nlp=nlp,
+            max_width=max_width,
+            context=context,
+            length_buckets=length_buckets,
+            all_spans=all_spans,
+        )
 
 
 class AntecedentFeaturesDict(TypedDict):
@@ -624,8 +570,6 @@ class AntecedentFeaturesDict(TypedDict):
 def antecedents_from_doc(
     text_doc: etree._ElementTree,
     annotations_doc: etree._ElementTree,
-    min_width: int = 1,
-    max_width: ty.Optional[int] = None,
     max_candidates: int = 100,
     distance_buckets: ty.Sequence[int] = (1, 2, 3, 4, 5, 7, 15, 32, 63),
 ) -> ty.Dict[str, ty.Dict[str, AntecedentFeaturesDict]]:
@@ -634,15 +578,7 @@ def antecedents_from_doc(
     s_pos = get_tag_pos(text_doc, [f"{TEI}s", f"{TEI}p", f"{TEI}head"])
     units = get_mentions(text_doc, annotations_doc)
     sort_filt_units = sorted(
-        (
-            (start, end, mention)
-            for (start, end), mention in units.items()
-            if (
-                min_width <= len(mention.content) < max_width
-                if max_width is not None
-                else (min_width <= len(mention.content))
-            )
-        ),
+        ((start, end, mention) for (start, end), mention in units.items()),
         key=lambda x: (w_pos[x[0]], w_pos[x[1]]),
     )
     if len(sort_filt_units) < 2:
@@ -764,9 +700,18 @@ def main_entry_point(argv=None):
             max_width=strict_max_width,
         )
     )
-    all_mentions = get_mentions(text_tree, annotations_tree)
-    mentions = {m["id"]: m for m in spans if m["id"] is not None}
-    skipped_mentions = len(all_mentions) - len(mentions)
+    all_mentions = {
+        m["id"]: m
+        for m in spans_from_doc(
+            text_tree,
+            annotations_tree,
+            context=[int(arguments["--context"])] * 2,
+            max_width=None,
+            all_spans=False,
+        )
+        if m["id"] is not None
+    }
+    skipped_mentions = len(all_mentions) - sum(1 for m in spans if m["id"] is not None)
     if skipped_mentions:
         logger.info(f"Skipping {skipped_mentions} out of {len(all_mentions)} mentions")
     antecedents = antecedents_from_doc(
@@ -821,7 +766,7 @@ def main_entry_point(argv=None):
         out_stream.write(
             orjson.dumps(
                 {
-                    "mentions": mentions,
+                    "mentions": all_mentions,
                     "antecedents": antecedents,
                     "args": dict(arguments),
                 }

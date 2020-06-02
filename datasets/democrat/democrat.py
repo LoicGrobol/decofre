@@ -54,11 +54,11 @@ def generate_clusters(source_dir: pathlib.Path, target_dir: pathlib.Path):
     clusters_dir = target_dir / "clusters"
     clusters_dir.mkdir(exist_ok=True, parents=True)
     text_lst = list((source_dir / "xml").glob("*.xml"))
-    for text in tqdm.tqdm(text_lst, unit="documents", desc="Building datafiles"):
+    for text in tqdm.tqdm(text_lst, unit="documents", desc="Building cluster files"):
         annotation = source_dir / "urs" / f"{text.stem}-urs.xml"
         clusters_file = clusters_dir / f"{text.stem}.json"
         generate_cluster_file(annotation, clusters_file)
 
 
-# generate_dataset(SCRIPT_DIR / "data" / "democrat", SCRIPT_DIR / "local")
+generate_dataset(SCRIPT_DIR / "data" / "democrat", SCRIPT_DIR / "local")
 generate_clusters(SCRIPT_DIR / "data" / "democrat", SCRIPT_DIR / "local")
