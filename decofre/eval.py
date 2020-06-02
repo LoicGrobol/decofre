@@ -118,7 +118,7 @@ def main_entry_point(argv=None):
         for p in (score_dir, sys_clusters_dir):
             p.mkdir(parents=True, exist_ok=True)
 
-        antecedents_files = [f for f in antecedents_dir.glob("*.json")]
+        antecedents_files = sorted(antecedents_dir.glob("*.json"))
         pbar = tqdm.tqdm(
             antecedents_files,
             unit="documents",
