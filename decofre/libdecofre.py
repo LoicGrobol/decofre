@@ -540,7 +540,7 @@ class BERTWordEncoder(torch.nn.Module):
 
     @classmethod
     def make_attention_mask(cls, seq_lens: torch.Tensor) -> torch.Tensor:
-        mask = torch.ones((seq_lens.shape[0], seq_lens.max()), dtype=torch.float64)
+        mask = torch.ones((seq_lens.shape[0], seq_lens.max().item()), dtype=torch.float64)
         for i, l in enumerate(seq_lens):
             mask[i, l:] = 0.0
         return mask

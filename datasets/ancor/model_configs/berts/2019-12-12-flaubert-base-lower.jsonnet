@@ -1,7 +1,7 @@
 {
   encoder: {
     type: 'bert',
-    pretrained: 'flaubert-base-cased',
+    pretrained: 'flaubert/flaubert_base_cased',
     project: false,
     span_encoding_dim: 500,
     hidden_dim: 300,

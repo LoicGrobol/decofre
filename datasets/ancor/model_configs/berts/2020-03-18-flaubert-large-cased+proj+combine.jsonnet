@@ -1,9 +1,7 @@
 {
   encoder: {
     type: 'bert',
-    // FIXME: fix the target dir once transformers AutoModel has a saner model type detection
-    // or FlauBERT is available with a codename
-    pretrained: 'flaubert-large-cased',
+    pretrained: 'flaubert/flaubert_large_cased',
     project: true,
     combine_layers: [-1, -2, -3, -4],
     span_encoding_dim: 500,
