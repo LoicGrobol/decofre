@@ -69,7 +69,9 @@ IGNORED_MENTION_TYPES = frozenset(("NULL",))
 
 TOKEN_TAGS = frozenset((f"{TEI}w", f"{TEI}pc"))
 
-SENTS_XPATH = ".//tei:text//tei:s|.//tei:text//tei:head|.//tei:text//tei:p"
+TEXT_XPATH = ".//tei:text"
+SENTS_TAGS = ("tei:s", "tei:head", "tei:p")
+SENTS_XPATH = "|".join(f".//{tag}" for tag in SENTS_TAGS)
 
 
 class ElementNotFoundError(Exception):
@@ -509,11 +511,12 @@ def spans_for_sent(
                 "entity_type": entity_type,
                 "chunk_inclusion": chunk_inclusion,
             }
-            if mention is None and all_spans:
+            if mention is None:
                 yield (
                     {**common_feats, "type": None, "new": None, "def": None, "id": None}
                 )
             else:
+                assert mention.identifier is not None
                 yield {
                     **common_feats,
                     "type": "MENTION",
@@ -540,7 +543,9 @@ def spans_from_doc(
     nlp = spacy.load("fr_core_news_sm")
     nlp.tokenizer = nlp.tokenizer.tokens_from_list
 
-    for sent in text_doc.xpath(SENTS_XPATH, namespaces=NSMAP,):
+    texts = text_doc.xpath(TEXT_XPATH, namespaces=NSMAP)
+    sentences = [s for t in texts for s in t.xpath(SENTS_XPATH, namespaces=NSMAP) if not s.xpath(SENTS_XPATH, namespaces=NSMAP)]
+    for sent in sentences:
         yield from spans_for_sent(
             sent=sent,
             units=units,
@@ -709,11 +714,13 @@ def main_entry_point(argv=None):
             max_width=None,
             all_spans=False,
         )
-        if m["id"] is not None
     }
     skipped_mentions = len(all_mentions) - sum(1 for m in spans if m["id"] is not None)
     if skipped_mentions:
-        logger.info(f"Skipping {skipped_mentions} out of {len(all_mentions)} mentions")
+        assert skipped_mentions > 0
+        logger.info(
+            f"Skipping {skipped_mentions} out of {len(all_mentions)} mentions in {arguments['<xml-file>']}"
+        )
     antecedents = antecedents_from_doc(
         text_tree, annotations_tree, max_candidates=int(arguments["--max-candidates"])
     )
