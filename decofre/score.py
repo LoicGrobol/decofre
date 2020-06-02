@@ -107,8 +107,8 @@ def main_entry_point(argv=None):
             cor.model,
             dataset,
             prepare_batch=datatools.AntecedentsDataset.prepare_source_batch,
-            batch_size=50,
-            data_len=len(sorted_mentions_ids),
+            batch_size=64,
+            data_len=(len(sorted_mentions_ids) - 1) // 64 + 1,
             join="chain",
         )
 
