@@ -8,7 +8,7 @@ Arguments:
   <output>  The output file, `-` for standard input (default)
 
 Options:
-  --lang <name>  	A spaCy model hand to use [default: fr_core_news_sm]
+  --lang <name>  	A spaCy model hand to use [default: fr_core_news_lg]
   -h, --help  	Show this screen.
 """
 
