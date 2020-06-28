@@ -465,7 +465,7 @@ def spans_from_doc(
     """
     w_pos = get_w_pos(doc)
     units = get_mentions(doc)
-    nlp = spacy.load("fr_core_news_sm")
+    nlp = spacy.load("fr_core_news_lg")
     nlp.tokenizer = nlp.tokenizer.tokens_from_list
 
     for utterance in doc.findall(".//tei:u", namespaces=NSMAP):

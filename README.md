@@ -21,7 +21,7 @@ to apply it to other languages and genres, though.
 2. Install the additional dependencies
 
    ```console
-   python -m spacy download fr_core_news_sm
+   python -m spacy download fr_core_news_lg
    ```
 
 ## Running a pretrained model
