@@ -13,7 +13,7 @@ Options:
   -h --help  Show this screen.
   --intermediary-dir <path>  A path to a directory to use for intermediary files,
                              defaults to a self-destructing temp dir
-  --lang <name>  spaCy model handle to use [default: fr_core_news_sm]
+  --lang <name>  spaCy model handle to use [default: fr_core_news_lg]
   --version   Show version.
 
 Notes:
