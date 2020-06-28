@@ -540,7 +540,7 @@ def spans_from_doc(
     """
     w_pos = get_tag_pos(text_doc, TOKEN_TAGS)
     units = get_mentions(text_doc, annotation_doc)
-    nlp = spacy.load("fr_core_news_sm")
+    nlp = spacy.load("fr_core_news_lg")
     nlp.tokenizer = nlp.tokenizer.tokens_from_list
 
     texts = text_doc.xpath(TEXT_XPATH, namespaces=NSMAP)
