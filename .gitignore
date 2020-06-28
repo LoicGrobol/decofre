@@ -1,5 +1,6 @@
 ## Repo specific
 .vscode
+*.code-workspace
 ### local folder
 local
 settings.json

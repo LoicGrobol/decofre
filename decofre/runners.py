@@ -615,8 +615,7 @@ class Evaluator(ignite.engine.Engine):
             )
             raise e
         time_taken = time.time() - start_time
-        hours, mins, secs = _to_hours_mins_secs(time_taken)
-        return hours, mins, secs
+        return time_taken
 
     def _inference(self, batch):
         cpu_inpt, cpu_target = batch
