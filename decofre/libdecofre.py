@@ -19,8 +19,8 @@ from typing_extensions import Final, Literal
 # Suppress tf messages at loading time
 import logging
 
-logging.getLogger("tensorflow").setLevel(logging.ERROR)  # noqa: E402
-import transformers
+logging.getLogger("tensorflow").setLevel(logging.ERROR)
+import transformers  # noqa: E402
 
 # from torch.nn.utils.rnn import pad_sequence
 

@@ -14,6 +14,7 @@ Options:
   --intermediary-dir <path>  A path to a directory to use for intermediary files,
                              defaults to a self-destructing temp dir
   --lang <name>  spaCy model handle to use [default: fr_core_news_lg]
+  --latex  Format the output for exploitation in LaTeX (very experimental)
   --version   Show version.
 
 Notes:
@@ -43,6 +44,7 @@ from decofre import __version__
 
 spacy.tokens.Doc.set_extension("clusters", default=None)
 spacy.tokens.Span.set_extension("cluster", default=None)
+spacy.tokens.Span.set_extension("singleton", default=True)
 
 
 @contextlib.contextmanager
@@ -118,7 +120,6 @@ def antecedents_from_mentions(
         return dict()
 
     # The first mention in a document has no antecedent candidates
-    # FIXME: we keep slicing, which generates copies, which makes me uneasy
 
     res = dict()
     for i, mention in enumerate(sorted_mentions[1:], start=1):
@@ -175,7 +176,7 @@ def antecedents_from_mentions(
     return res
 
 
-def text_out(doc: spacy.tokens.Doc) -> str:
+def text_out(doc: spacy.tokens.Doc, latex: bool = False) -> str:
     mentions_spans = sorted(
         (m for i, c in doc._.clusters.items() for m in c),
         key=lambda m: (m.start_char, -m.end_char),
@@ -188,17 +189,41 @@ def text_out(doc: spacy.tokens.Doc) -> str:
         while open_spans and open_spans[-1].end_char <= m.start_char:
             span_to_close = open_spans.pop()
             res.append(text[current_char : span_to_close.end_char])
-            res.append(f"][{span_to_close._.cluster}]")
+            if span_to_close._.singleton:
+                if latex:
+                    res.append("}")
+                else:
+                    res.append("]")
+            else:
+                if latex:
+                    res.append("}")
+                else:
+                    res.append(f"][{span_to_close._.cluster}]")
             current_char = span_to_close.end_char
         if current_char < m.start_char:
             res.append(text[current_char : m.start_char])
             current_char = m.start_char
-        res.append("[")
+        if latex:
+            if m._.singleton:
+                res.append(r"\mention{")
+            else:
+                res.append(f"\\mention[{m._.cluster}]{{")
+        else:
+            res.append("[")
         open_spans.append(m)
     while open_spans:
         span_to_close = open_spans.pop()
         res.append(text[current_char : span_to_close.end_char])
-        res.append(f"][{span_to_close._.cluster}]")
+        if span_to_close._.singleton:
+            if latex:
+                res.append("}")
+            else:
+                res.append("]")
+        else:
+            if latex:
+                res.append("}")
+            else:
+                res.append(f"][{span_to_close._.cluster}]")
         current_char = span_to_close.end_char
     res.append(text[current_char:])
     return "".join(res)
@@ -266,6 +291,8 @@ def main_entry_point(argv=None):
                 mention = mention_dict[m_id]
                 mention_span = doc[mention["start"] : mention["end"] + 1]
                 mention_span._.cluster = i
+                if len(c) > 1:
+                    mention_span._.singleton = False
                 doc._.clusters[i].append(mention_span)
 
         # augmented_doc_path = intermediary_dir / "coref_doc.spacy.bin"
@@ -273,7 +300,7 @@ def main_entry_point(argv=None):
         #     out_stream.write(doc.to_bytes())
 
     with smart_open(arguments["<output>"], "w") as out_stream:
-        out_stream.write(text_out(doc))
+        out_stream.write(text_out(doc, latex=arguments["--latex"]))
         out_stream.write("\n")
     # displacy_visu_data = {
     #     "text": doc.text,
