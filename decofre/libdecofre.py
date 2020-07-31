@@ -290,8 +290,7 @@ class SeqEncoder(torch.nn.Module):
         _, hidden = self.rnn(embedded)
         # Merge directions
         hidden = hidden.transpose(0, 1).reshape((len(lengths), 2 * self.hidden_dim))
-        # !FIXME: double dropout here
-        out = self.output(self.drop(hidden))
+        out = self.output(hidden)
 
         return out
 
