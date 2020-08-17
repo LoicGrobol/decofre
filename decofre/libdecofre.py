@@ -590,8 +590,8 @@ class MaskedLinearSelfAttention(torch.jit.ScriptModule):
         masked_weights = torch.where(
             mask.unsqueeze(2),
             raw_weights,
-            # FIXME: Switch this to a scalar as soon as https://github.com/pytorch/pytorch/issues/9190
-            # is merged
+            # FIXME: Switch this to a scalar as soon as https://github.com/pytorch/pytorch/pull/40336
+            # lands in stable
             torch.tensor(-1e32, device=inpt.device, dtype=torch.float),
         )
         normalized_weights = torch.nn.functional.softmax(masked_weights, dim=-2)
