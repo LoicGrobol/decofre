@@ -114,7 +114,7 @@ class DenseSparseAdamW(Optimizer):
                         group["lr"] * math.sqrt(bias_correction2) / bias_correction1
                     )
 
-                    p.data.addcdiv_(-step_size, exp_avg, denom)
+                    p.data.addcdiv_(exp_avg, denom, value=-step_size)
 
                     if group["weight_decay"] != 0:
                         # Perform stepweight decay
