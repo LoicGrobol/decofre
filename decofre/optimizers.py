@@ -103,7 +103,7 @@ class DenseSparseAdamW(Optimizer):
                     #     grad = grad.add(group['weight_decay'], p.data)
 
                     # Decay the first and second moment running average coefficient
-                    exp_avg.mul_(beta1).add_(1 - beta1, grad)
+                    exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
                     exp_avg_sq.mul_(beta2).addcmul_(1 - beta2, grad, grad)
 
                     denom = exp_avg_sq.sqrt().add_(group["eps"])
