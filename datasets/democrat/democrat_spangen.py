@@ -737,36 +737,31 @@ def main_entry_point(argv=None):
                 non_mentions_i.append(i)
             else:
                 mentions_i.append(i)
-        if arguments["--oversample"]:
-            replications = (
-                math.ceil(((1 - r) / r) * len(non_mentions_i) / len(mentions_i)) - 1
-            )
-            spans.extend(replications * [spans[i] for i in mentions_i])
+
+        n_non_mentions = math.ceil(len(mentions_i) * r / (1 - r))
+        if n_non_mentions < len(non_mentions_i):
+            sampled_non_mentions_i = random.sample(non_mentions_i, n_non_mentions)
+            if arguments["--keep-single"]:
+                for i in non_mentions_i:
+                    if len(spans[i]["content"]) == 1:
+                        sampled_non_mentions_i.append(i)
+            if arguments["--keep-named-entities"]:
+                for i in non_mentions_i:
+                    if spans[i]["entity_type"] is not None:
+                        sampled_non_mentions_i.append(i)
+            if arguments["--keep-name-chunks"]:
+                for i in non_mentions_i:
+                    if spans[i]["chunk_inclusion"] == "exact":
+                        sampled_non_mentions_i.append(i)
+            sampled_non_mentions_i = set(sampled_non_mentions_i)
+            sampled_spans_i = sorted((*mentions_i, *sampled_non_mentions_i))
+            spans = [spans[i] for i in sampled_spans_i]
         else:
-            n_non_mentions = math.ceil(len(mentions_i) * r / (1 - r))
-            if n_non_mentions < len(non_mentions_i):
-                sampled_non_mentions_i = random.sample(non_mentions_i, n_non_mentions)
-                if arguments["--keep-single"]:
-                    for i in non_mentions_i:
-                        if len(spans[i]["content"]) == 1:
-                            sampled_non_mentions_i.append(i)
-                if arguments["--keep-named-entities"]:
-                    for i in non_mentions_i:
-                        if spans[i]["entity_type"] is not None:
-                            sampled_non_mentions_i.append(i)
-                if arguments["--keep-name-chunks"]:
-                    for i in non_mentions_i:
-                        if spans[i]["chunk_inclusion"] == "exact":
-                            sampled_non_mentions_i.append(i)
-                sampled_non_mentions_i = set(sampled_non_mentions_i)
-                sampled_spans_i = sorted((*mentions_i, *sampled_non_mentions_i))
-                spans = [spans[i] for i in sampled_spans_i]
-            else:
-                logger.warning(
-                    f"Not enough non-mentions in {arguments['<in-file>']}"
-                    f" to enforce non-mention ratio of {r}"
-                    f" (actual ratio {len(non_mentions_i)/len(spans)})"
-                )
+            logger.warning(
+                f"Not enough non-mentions in {arguments['<in-file>']}"
+                f" to enforce non-mention ratio of {r}"
+                f" (actual ratio {len(non_mentions_i)/len(spans)})"
+            )
 
     with smart_open(arguments["--mentions"], "wb") as out_stream:
         out_stream.write(orjson.dumps(spans))
