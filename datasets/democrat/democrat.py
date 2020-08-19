@@ -1,6 +1,8 @@
 import pathlib
 import subprocess  # nosec
 
+from typing import Any, Dict, Optional
+
 from loguru import logger
 import tqdm
 
@@ -12,21 +14,25 @@ def generate_spans_and_antecedents(
     annotation_path: pathlib.Path,
     spans_dir: pathlib.Path,
     antecedents_dir: pathlib.Path,
+    seed: Optional[int] = None,
+    ratio: Optional[float] = None,
 ):
     spans_dir.mkdir(parents=True, exist_ok=True)
     antecedents_dir.mkdir(parents=True, exist_ok=True)
+    args = [
+        str(text_path),
+        str(annotation_path),
+        "-m",
+        str(spans_dir / f"{text_path.stem}.json"),
+        "-a",
+        str(antecedents_dir / f"{text_path.stem}.json"),
+    ]
+    if seed is not None:
+        args.extend(("--seed", str(seed),))
+    if ratio is not None:
+        args.extend(("--det-ratio", str(ratio)))
     subprocess.run(
-        [
-            "python",
-            str(SCRIPT_DIR / "democrat_spangen.py"),
-            str(text_path),
-            str(annotation_path),
-            "-m",
-            str(spans_dir / f"{text_path.stem}.json"),
-            "-a",
-            str(antecedents_dir / f"{text_path.stem}.json"),
-        ],
-        check=True,
+        ["python", str(SCRIPT_DIR / "democrat_spangen.py"), *args], check=True,
     )
 
 
@@ -42,7 +48,11 @@ def generate_cluster_file(annotation_path: pathlib.Path, clusters_path: pathlib.
     )
 
 
-def generate_dataset(source_dir: pathlib.Path, target_dir: pathlib.Path):
+def generate_dataset(
+    source_dir: pathlib.Path,
+    target_dir: pathlib.Path,
+    spangen_args=Optional[Dict[str, Any]],
+):
     logger.info(f"Generating training from {source_dir} to {target_dir}")
     spans_dir = target_dir / "mentions"
     antecedents_dir = target_dir / "antecedents"
@@ -51,7 +61,9 @@ def generate_dataset(source_dir: pathlib.Path, target_dir: pathlib.Path):
     )
     for text in tqdm.tqdm(text_lst, unit="documents", desc="Building datafiles"):
         annotation = source_dir / f"{text.stem}-urs.xml"
-        generate_spans_and_antecedents(text, annotation, spans_dir, antecedents_dir)
+        generate_spans_and_antecedents(
+            text, annotation, spans_dir, antecedents_dir, **spangen_args
+        )
 
 
 def generate_clusters(source_dir: pathlib.Path, target_dir: pathlib.Path):
@@ -68,10 +80,16 @@ def generate_clusters(source_dir: pathlib.Path, target_dir: pathlib.Path):
 
 
 def process_split(root_dir: pathlib.Path):
-    for subcorpus in ("train", "dev", "test"):
+    subcorpora = (
+        ("train", {"seed": 0, "ratio": 0.99}),
+        ("dev", {"seed": 0}),
+        ("test", {"seed": 0}),
+    )
+    for subcorpus, args in subcorpora:
         generate_dataset(
             root_dir / "data" / "democrat" / subcorpus,
             root_dir / "local" / "processed" / subcorpus,
+            spangen_args=args,
         )
         generate_clusters(
             root_dir / "data" / "democrat" / subcorpus,
