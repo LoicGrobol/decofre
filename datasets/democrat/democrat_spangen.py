@@ -758,7 +758,7 @@ def main_entry_point(argv=None):
             spans = [spans[i] for i in sampled_spans_i]
         else:
             logger.warning(
-                f"Not enough non-mentions in {arguments['<in-file>']}"
+                f"Not enough non-mentions in {arguments['<urs-file>']}"
                 f" to enforce non-mention ratio of {r}"
                 f" (actual ratio {len(non_mentions_i)/len(spans)})"
             )
