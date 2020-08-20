@@ -838,5 +838,4 @@ class BERTEncoder(Encoder):
         # TODO: THIS IS THE OPPOSITE OF THE DOC BUT CONSISTENT WITH THE cODE WHAT THE HELL
         if values != (1, 0, 1):
             raise ValueError("Invalid mask")
-        breakpoint()
         return lengths[0]
