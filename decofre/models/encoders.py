@@ -866,4 +866,3 @@ class BERTEncoder(Encoder):
             features_digitizers=features_digitizers,
             pretrained=model_config["pretrained"],
         )
-
