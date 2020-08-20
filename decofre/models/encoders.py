@@ -717,37 +717,18 @@ class BERTEncoder(Encoder):
         right_context = ty.cast(ty.Sequence[str], span["right_context"])
         span_with_context = [*left_context, *content, *right_context]
 
-        if self.tokenizer.is_fast:
-            encoded = self.tokenizer(
-                span_with_context,
-                is_split_into_words=True,
-                return_special_tokens_mask=True,
-            )
-            span_boundaries = (
-                encoded.word_to_tokens(len(left_context)).start,
-                encoded.word_to_tokens(len(left_context) + len(content)).end,
-            )
-        else:
-            bert_tokens = [
-                self.tokenizer.tokenize(token) for token in span_with_context
-            ]
-            encoded = self.tokenizer.encode_plus(
-                [subtoken for token in bert_tokens for subtoken in token],
-                return_special_tokens_mask=True,
-            )
-            bert_word_lengths = [len(word) for word in bert_tokens]
-            alignments = align_with_special_tokens(
-                bert_word_lengths, encoded["special_tokens_mask"],
-            )
-            span_boundaries = (
-                alignments[len(left_context)].start,
-                alignments[len(left_context) + len(content)].end,
-            )
+        pieces = [*tokenized_left_context, *tokenized_content, *tokenized_right_context]
+        encoded = self.tokenizer.encode_plus(
+            pieces,
+            add_special_tokens=True,
+            return_special_tokens_mask=True,
+        )
+        # Mask processing to get the correct boundary indices, this could probably be made more
+        # efficient if/when we get a saner api for BERT digitization
+        shift = self.shift_from_mask(encoded["special_tokens_mask"])
         # FIXME: :art:
         feats = self.digitize_feats(span)
-        return datatools.FeaturefulSpan(
-            torch.tensor(encoded["input_ids"]), span_boundaries, feats
-        )
+        return datatools.FeaturefulSpan(torch.tensor(encoded["input_ids"]), span_boundaries, feats)
 
     def save(self, path: ty.Union[str, pathlib.Path]):
         """Save as a model archive."""
