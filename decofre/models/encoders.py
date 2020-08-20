@@ -688,7 +688,6 @@ class BERTEncoder(Encoder):
             pieces,
             add_special_tokens=True,
             return_special_tokens_mask=True,
-            return_tensors="pt",
         )
         # Mask processing to get the correct boundary indices, this could probably be made more
         # efficient if/when we get a saner api for BERT digitization
@@ -699,7 +698,7 @@ class BERTEncoder(Encoder):
             shift + len(tokenized_left_context) + len(tokenized_content),
         )
         feats = self.digitize_feats(span)
-        return datatools.FeaturefulSpan(encoded["input_ids"], span_boundaries, feats)
+        return datatools.FeaturefulSpan(torch.tensor(encoded["input_ids"]), span_boundaries, feats)
 
     def save(self, path: ty.Union[str, pathlib.Path]):
         """Save as a model archive."""
@@ -839,4 +838,5 @@ class BERTEncoder(Encoder):
         # TODO: THIS IS THE OPPOSITE OF THE DOC BUT CONSISTENT WITH THE cODE WHAT THE HELL
         if values != (1, 0, 1):
             raise ValueError("Invalid mask")
+        breakpoint()
         return lengths[0]

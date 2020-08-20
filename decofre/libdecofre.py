@@ -511,7 +511,7 @@ class BERTWordEncoder(torch.nn.Module):
     @torch.jit.ignore
     def forward(self, pieces_ids: ty.Sequence[torch.Tensor]) -> WordEncoderOutput:
         # FIXME: this should be dealt with in digitize/collate (or should it ?)
-        seq_lens = torch.tensor([sent.shape[1] for sent in pieces_ids])
+        seq_lens = torch.tensor([sent.shape[0] for sent in pieces_ids])
         padded_pieces = pad_sequence(
             [c.squeeze(0) for c in pieces_ids], batch_first=True
         )
