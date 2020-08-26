@@ -448,8 +448,10 @@ MentionFeaturesDict = TypedDict(
 
 def morph_from_tag(tag: str) -> ty.List[str]:
     """Extract morphosyntax features from spaCy tag str."""
-    pos, rest = tag.split("__", maxsplit=1)
-    return rest.split("|")
+    pos, *rest = tag.split("__", maxsplit=1)
+    if not rest:
+        return []
+    return rest[0].split("|")
 
 
 def spans_from_doc(
