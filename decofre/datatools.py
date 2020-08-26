@@ -448,6 +448,7 @@ class AntecedentsDataset(LmdbDataset):
             spans = FeaturefulSpan.collate(spans)
             pairs_feats = torch.tensor(pairs_feats, dtype=torch.long)
             collated_antecedents.append((spans, pairs_feats))
+        breakpoint()
         return (mentions, collated_antecedents)
 
     @classmethod
@@ -511,6 +512,7 @@ class AntecedentsDataset(LmdbDataset):
                 if not targets:
                     targets = [0]
                 antecedents[m_id] = (tuple(current_ant), tuple(targets))
+                breakpoint()
 
             res.add_data(mentions, ((m, a, t) for m, (a, t) in antecedents.items()))
 

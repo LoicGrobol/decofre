@@ -137,16 +137,12 @@ def antecedents_from_mentions(
             )
             u_distance = int(
                 np.digitize(
-                    mention["sentence"] - candidate["sentence"],
-                    bins=distance_buckets,
-                    right=True,
+                    mention["sentence"] - candidate["sentence"], bins=distance_buckets,
                 )
             )
             m_distance: int = int(
                 np.digitize(
-                    len(antecedent_candidates) - j - 1,
-                    bins=distance_buckets,
-                    right=True,
+                    len(antecedent_candidates) - j, bins=distance_buckets, right=True,
                 )
             )
             spk_agreement = mention.get("speaker") == candidate.get("speaker")

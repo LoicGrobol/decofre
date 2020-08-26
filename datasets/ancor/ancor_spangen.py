@@ -471,10 +471,7 @@ def spans_from_doc(
     for utterance in doc.findall(".//tei:u", namespaces=NSMAP):
         content: ty.List[etree._Element] = list(utterance.iter(*TOKEN_TAGS))
         processed_utterance = nlp([t.text for t in content])
-        ent_dict = {
-            (e[0], e[-1]): e.label_
-            for e in processed_utterance.ents
-        }
+        ent_dict = {(e[0], e[-1]): e.label_ for e in processed_utterance.ents}
         noun_chunks = sorted(processed_utterance.noun_chunks)
         spans = generate_spans_with_context(
             zip(content, ty.cast(ty.Iterable[spacy.tokens.Token], processed_utterance)),
@@ -495,8 +492,13 @@ def spans_from_doc(
             mention = units.get((start_id, end_id))
 
             pos = [w.pos_ for w in (*processed_left, *processed_span, *processed_right)]
-            lemma = [w.lemma_ for w in (*processed_left, *processed_span, *processed_right)]
-            morph = [morph_from_tag(w.tag_) for w in (*processed_left, *processed_span, *processed_right)]
+            lemma = [
+                w.lemma_ for w in (*processed_left, *processed_span, *processed_right)
+            ]
+            morph = [
+                morph_from_tag(w.tag_)
+                for w in (*processed_left, *processed_span, *processed_right)
+            ]
             left_context = [w.text for w in left_context]
             right_context = [w.text for w in right_context]
             if len(left_context) < context[0]:
@@ -562,6 +564,7 @@ def spans_from_doc(
 
 class AntecedentFeaturesDict(TypedDict):
     """Features of antecedent pairs."""
+
     w_distance: int
     u_distance: int
     m_distance: int
@@ -624,14 +627,11 @@ def antecedents_from_doc(
                     u_pos[xmlid(mention.targets_parent)]
                     - u_pos[xmlid(candidate.targets_parent)],
                     bins=distance_buckets,
-                    right=True,
                 )
             )
             m_distance: int = int(
                 np.digitize(
-                    len(antecedent_candidates) - j - 1,
-                    bins=distance_buckets,
-                    right=True,
+                    len(antecedent_candidates) - j, bins=distance_buckets, right=True,
                 )
             )
             spk_agreement = mention.speaker == candidate.speaker
@@ -765,7 +765,13 @@ def main_entry_point(argv=None):
 
     with smart_open(arguments["--antecedents"], "wb") as out_stream:
         out_stream.write(
-            orjson.dumps({"mentions": mentions, "antecedents": antecedents, "args": dict(arguments)})
+            orjson.dumps(
+                {
+                    "mentions": mentions,
+                    "antecedents": antecedents,
+                    "args": dict(arguments),
+                }
+            )
         )
 
 
