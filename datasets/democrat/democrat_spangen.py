@@ -20,7 +20,6 @@ Options:
   --keep-name-chunks  	Keep detected nominal chunks when downsampling
   --max-candidates <n>  	Maximum number of antecedent candidates [default: 100]
   --max-width <n>  	Maximum size for spans [default: 32]
-  --only-id  	Only output mention ids instead of content
   --seed <i>  A random seed for sampling
 
 Example:
@@ -546,7 +545,12 @@ def spans_from_doc(
     nlp.tokenizer = nlp.tokenizer.tokens_from_list
 
     texts = text_doc.xpath(TEXT_XPATH, namespaces=NSMAP)
-    sentences = [s for t in texts for s in t.xpath(SENTS_XPATH, namespaces=NSMAP) if not s.xpath(SENTS_XPATH, namespaces=NSMAP)]
+    sentences = [
+        s
+        for t in texts
+        for s in t.xpath(SENTS_XPATH, namespaces=NSMAP)
+        if not s.xpath(SENTS_XPATH, namespaces=NSMAP)
+    ]
     for sent in sentences:
         yield from spans_for_sent(
             sent=sent,
@@ -595,7 +599,6 @@ def antecedents_from_doc(
     chain_from_mention = {m: c for c in schemas.values() for m in c}
 
     # The first mention in a document has no antecedent candidates
-    # FIXME: we keep slicing, which generates copies, which makes me uneasy
     mentions = enumerate(sort_filt_units[1:], start=1)
 
     res = dict()
@@ -615,16 +618,14 @@ def antecedents_from_doc(
                 np.digitize(
                     s_pos[mention.targets_parent] - s_pos[candidate.targets_parent],
                     bins=distance_buckets,
-                    right=True,
                 )
             )
             m_distance: int = int(
                 np.digitize(
-                    len(antecedent_candidates) - j - 1,
-                    bins=distance_buckets,
-                    right=True,
+                    len(antecedent_candidates) - j, bins=distance_buckets, right=True,
                 )
             )
+            breakpoint()
             spk_agreement = mention.speaker == candidate.speaker
 
             intersect = len(mention_content_set.intersection(candidate_content_set))
