@@ -625,7 +625,6 @@ def antecedents_from_doc(
                     len(antecedent_candidates) - j, bins=distance_buckets, right=True,
                 )
             )
-            breakpoint()
             spk_agreement = mention.speaker == candidate.speaker
 
             intersect = len(mention_content_set.intersection(candidate_content_set))
