@@ -63,13 +63,14 @@ def load_embeddings(
     format.
 
     See <https://fasttext.cc/docs/en/crawl-vectors.html> to get some. OOV
-    embeddings are initialized at 0.
+    embeddings are initialized as normal samples.
     """
     with open(path) as in_stream:
         n, d = map(int, in_stream.readline().split())
         weights = []
         if lex.allow_unknown:
             weights.append(normal_tensor((d,)))
+        # FIXME: this is not order-preserving
         for _ in lex.specials:
             weights.append(normal_tensor((d,)))
         tokens = []
@@ -149,7 +150,7 @@ def generate_tokens_lexicons(
     sources: ty.Iterable[ty.Union[str, pathlib.Path]],
     allow_unknown: ty.Optional[ty.Iterable[str]] = None,
 ) -> ty.Dict[str, lexicon.Lexicon]:
-    """Generate features lexicons from json files"""
+    """Generate token features lexicons from json files"""
     allow_unknown = set(allow_unknown) if allow_unknown is not None else set()
     counters = {n: Counter() for n in features_names}  # type: ty.Dict[str, Counter]
     for f in tqdm.tqdm(
@@ -163,6 +164,7 @@ def generate_tokens_lexicons(
             data = json.load(in_stream)
             # FIXME: this is brittle and should be fixed asap (2019-06-16)
             # FIXME: yes indeed (2020-02-14)
+            # FIXME: Yup, but it won't (2020-08-27)
             if isinstance(data, ty.Mapping):  # This is an antecedent file
                 data = (
                     candidate

@@ -589,6 +589,7 @@ def antecedents_from_doc(
     w_pos = get_w_pos(doc)
     u_pos = get_u_pos(doc)
     units = get_mentions(doc)
+    # Using (end word, start word) ordering to avoid the weird order in [[*]₁ [*]₃]₂
     sort_filt_units = sorted(
         (
             (start, end, mention)
@@ -599,7 +600,7 @@ def antecedents_from_doc(
                 else (min_width <= len(mention.content))
             )
         ),
-        key=lambda x: (w_pos[x[0]], w_pos[x[1]]),
+        key=lambda x: (w_pos[x[1]], w_pos[x[0]]),
     )
     if len(sort_filt_units) < 2:
         return dict()
