@@ -588,9 +588,10 @@ def antecedents_from_doc(
     w_pos = get_tag_pos(text_doc, TOKEN_TAGS)
     s_pos = get_tag_pos(text_doc, [f"{TEI}s", f"{TEI}p", f"{TEI}head"])
     units = get_mentions(text_doc, annotations_doc)
+    # Using (end word, start word) ordering to avoid the weird order in [[*]₁ [*]₃]₂
     sort_filt_units = sorted(
         ((start, end, mention) for (start, end), mention in units.items()),
-        key=lambda x: (w_pos[x[0]], w_pos[x[1]]),
+        key=lambda x: (w_pos[x[1]], w_pos[x[0]]),
     )
     if len(sort_filt_units) < 2:
         return dict()
