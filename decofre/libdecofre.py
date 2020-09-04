@@ -539,7 +539,9 @@ class BERTWordEncoder(torch.nn.Module):
 
     @classmethod
     def make_attention_mask(cls, seq_lens: torch.Tensor) -> torch.Tensor:
-        mask = torch.ones((seq_lens.shape[0], seq_lens.max().item()), dtype=torch.float64)
+        mask = torch.ones(
+            (seq_lens.shape[0], seq_lens.max().item()), dtype=torch.float64
+        )
         for i, l in enumerate(seq_lens):
             mask[i, l:] = 0.0
         return mask
@@ -1015,16 +1017,19 @@ def slack_rescaled_max_margin(
     """Compute the slack-rescaled max margin loss as in Wiseman et al. (2015)
 
     ## Arguments
-      - `inpt` A float tensor representing the scores of each antecedent candidate
-      - `target` An int tensor containing the indices of the correct antecedents
 
-    Wiseman, Sam, Alexander M. Rush, Stuart M. Shieber, and Jason Weston. 2015.
-    ‘Learning Anaphoricity and Antecedent Ranking Features for Coreference
-    Resolution’. In *Proceedings of the 53rd Annual Meeting of the Association
-    for Computational Linguistics and the 7th International Joint Conference on
-    Natural Language Processing of the Asian Federation of Natural Language
-    Processing*, Beijing, China.
-    <http://aclweb.org/anthology/P/P15/P15-1137.pdf>.
+    - `inpt` A float tensor representing the scores of each antecedent candidate
+    - `target` An int tensor containing the indices of the correct antecedents
+
+    ## References
+
+    - Wiseman, Sam, Alexander M. Rush, Stuart M. Shieber, and Jason Weston. 2015.
+      ‘Learning Anaphoricity and Antecedent Ranking Features for Coreference
+      Resolution’. In *Proceedings of the 53rd Annual Meeting of the Association
+      for Computational Linguistics and the 7th International Joint Conference on
+      Natural Language Processing of the Asian Federation of Natural Language
+      Processing*, Beijing, China.
+      <http://aclweb.org/anthology/P/P15/P15-1137.pdf>.
     """
     scores = []
     for response, key in zip(inpt, target):
