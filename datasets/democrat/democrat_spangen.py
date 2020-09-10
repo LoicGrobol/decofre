@@ -501,9 +501,9 @@ def spans_for_sent(
             chunk_inclusion = span_inclusion(processed_sent[i:j], noun_chunks)
 
             common_feats = {
-                "content": content,
-                "left_context": left_context,
-                "right_context": right_context,
+                "content": ["<mask>"]*len(content),
+                "left_context": ["<mask>"]*len(left_context),
+                "right_context": ["<mask>"]*len(right_context),
                 "length": length,
                 "start": w_pos[sent_nodes[i]],
                 "end": w_pos[sent_nodes[j - 1]],
