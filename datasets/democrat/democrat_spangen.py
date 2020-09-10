@@ -420,7 +420,7 @@ MentionFeaturesDict = TypedDict(
         "end": int,
         "pos": ty.Sequence[str],
         "lemma": ty.Sequence[str],
-        "morph": ty.Sequence[ty.Optional[ty.Collection[str]]],
+        "morph": ty.Sequence[ty.Dict[str, str]],
         "entity_type": ty.Optional[str],
         "chunk_inclusion": ChunkInclusionStatus,
     },
@@ -428,12 +428,12 @@ MentionFeaturesDict = TypedDict(
 )
 
 
-def morph_from_tag(tag: str) -> ty.List[str]:
+def morph_from_tag(tag: str) -> ty.Dict[str, str]:
     """Extract morphosyntax features from spaCy tag str."""
     pos, *rest = tag.split("__", maxsplit=1)
     if not rest:
-        return []
-    return rest[0].split("|")
+        return dict()
+    return dict(feat.split("=") for feat in rest[0].split("|"))
 
 
 def spans_for_sent(
@@ -480,16 +480,17 @@ def spans_for_sent(
             lemma = [w.lemma_ for w in processed_context]
             morph = [morph_from_tag(w.tag_) for w in processed_context]
 
+            # FIXME: would be cleaner with a condition on i
             if len(left_context) < context[0]:
                 left_context.insert(0, "<start>")
                 pos.insert(0, "<start>")
                 lemma.insert(0, "<start>")
-                morph.insert(0, [])
+                morph.insert(0, dict())
             if len(right_context) < context[1]:
                 right_context.append("<end>")
                 pos.append("<end>")
                 lemma.append("<end>")
-                morph.append([])
+                morph.append(dict())
 
             length = (
                 int(np.digitize(len(content), bins=length_buckets, right=True))
@@ -608,6 +609,8 @@ def antecedents_from_doc(
         chain = chain_from_mention.get(mention.identifier, None)
         antecedent_candidates = sort_filt_units[max(0, i - max_candidates) : i]
         antecedents: ty.Dict[str, AntecedentFeaturesDict] = dict()
+        # FIXME: better idea: instead, add already consumed mentions to a stack and use **that** to
+        # get candidates
         for j, (s2, e2, candidate) in enumerate(antecedent_candidates):
             candidate_content_set = set(candidate.content)
             coref = chain is not None and candidate.identifier in chain
@@ -621,6 +624,7 @@ def antecedents_from_doc(
                     bins=distance_buckets,
                 )
             )
+            # FIXME: Why not rather iterate in reverse ?
             m_distance: int = int(
                 np.digitize(
                     len(antecedent_candidates) - j, bins=distance_buckets, right=True,

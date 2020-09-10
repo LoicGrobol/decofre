@@ -48,7 +48,7 @@ def get_clusters(tree: etree._ElementTree) -> ty.Dict[str, ty.Set[str]]:
 
     res = dict()
     for c in chains_grp.iter(f"{TEI}link"):
-        target = c.attrib[f"target"]
+        target = c.attrib["target"]
         res[c.attrib[f"{XML}id"]] = set((t[1:] for t in target.split()))
 
     non_sing = set().union(*res.values())
