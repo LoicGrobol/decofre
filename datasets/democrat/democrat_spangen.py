@@ -501,9 +501,9 @@ def spans_for_sent(
             chunk_inclusion = span_inclusion(processed_sent[i:j], noun_chunks)
 
             common_feats = {
-                "content": ["<mask>"]*len(content),
-                "left_context": ["<mask>"]*len(left_context),
-                "right_context": ["<mask>"]*len(right_context),
+                "content": content,
+                "left_context": left_context,
+                "right_context": right_context,
                 "length": length,
                 "start": w_pos[sent_nodes[i]],
                 "end": w_pos[sent_nodes[j - 1]],
@@ -647,13 +647,19 @@ def antecedents_from_doc(
             antecedents[candidate.identifier] = {
                 "w_distance": w_distance,
                 "u_distance": u_distance,
-                "m_distance": m_distance,
+                "m_distance": 0,
                 "spk_agreement": spk_agreement,
                 "overlap": overlap,
                 "coref": coref,
                 "token_incl": token_incl_ratio,
                 "token_com": token_com_ratio,
             }
+        antecedents = {
+            k: v
+            for k, v in antecedents.items()
+            if v["coref"]
+            or v["m_distance"] == 0
+        }
         res[mention.identifier] = antecedents
     return res
 
