@@ -647,7 +647,7 @@ def antecedents_from_doc(
             antecedents[candidate.identifier] = {
                 "w_distance": w_distance,
                 "u_distance": u_distance,
-                "m_distance": 0,
+                "m_distance": m_distance,
                 "spk_agreement": spk_agreement,
                 "overlap": overlap,
                 "coref": coref,
@@ -660,6 +660,8 @@ def antecedents_from_doc(
             if v["coref"]
             or v["m_distance"] == 0
         }
+        for v in antecedents.values():
+            v["m_distance"] = 0
         res[mention.identifier] = antecedents
     return res
 
