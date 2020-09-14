@@ -16,6 +16,8 @@ def generate_spans_and_antecedents(
     antecedents_dir: pathlib.Path,
     seed: Optional[int] = None,
     ratio: Optional[float] = None,
+    max_m_distance: Optional[int] = None,
+    max_candidates: Optional[int] = None,
 ):
     spans_dir.mkdir(parents=True, exist_ok=True)
     antecedents_dir.mkdir(parents=True, exist_ok=True)
@@ -31,6 +33,10 @@ def generate_spans_and_antecedents(
         args.extend(("--seed", str(seed),))
     if ratio is not None:
         args.extend(("--det-ratio", str(ratio)))
+    if max_m_distance is not None:
+        args.extend(("--max-m-dist", str(max_m_distance)))
+    if max_candidates is not None:
+        args.extend(("--max-candidates", str(max_candidates)))
     subprocess.run(
         ["python", str(SCRIPT_DIR / "democrat_spangen.py"), *args], check=True,
     )
@@ -81,9 +87,9 @@ def generate_clusters(source_dir: pathlib.Path, target_dir: pathlib.Path):
 
 def process_split(root_dir: pathlib.Path):
     subcorpora = (
-        ("train", {"seed": 0, "ratio": 0.99}),
-        ("dev", {"seed": 0}),
-        ("test", {"seed": 0}),
+        ("train", {"seed": 0, "ratio": 0.99, "max_m_distance": 128, "max_candidates": 32}),
+        ("dev", {"seed": 0, "max_m_distance": 128}),
+        ("test", {"seed": 0, "max_m_distance": 128}),
     )
     for subcorpus, args in subcorpora:
         generate_dataset(

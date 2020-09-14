@@ -10,15 +10,19 @@ Arguments:
 
 Options:
   -h, --help  	Show this screen.
-  -m, --mentions <f>  	Mention detection data file (see below)
-  -a, --antecedents <f>  	Antecedent finding data file (see below)
+  -m, --mentions <f>  	Mention detection data file
+  -a, --antecedents <f>  	Antecedent finding data file
   --buckets  	Mentions distance bucket boundaries (as a comma-separated list)
   --context <n>  	Context size [default: 10]
   --det-ratio <r>  	Maximum ratio of non-mention spans
   --keep-single  	Keep spans of length 1 when downsampling
   --keep-named-entities  	Keep detected named entities when downsampling
   --keep-name-chunks  	Keep detected nominal chunks when downsampling
-  --max-candidates <n>  	Maximum number of antecedent candidates [default: 100]
+  --max-m-dist <n>	  Maximum number of antecedent candidates [default: 100]
+  --max-candidates <n>    Maximum number of antecedent candidates, if inferior to `max-m-dist`,
+                          this will subsample to keep the two preceding mentions and as many
+                          true antecedents as possible priorizing the closest ones
+                          (defaults to `max-m-dist`).
   --max-width <n>  	Maximum size for spans [default: 32]
   --seed <i>  A random seed for sampling
 
@@ -36,6 +40,8 @@ import sys
 import signal
 
 import typing as ty
+
+from heapq import nlargest
 
 import spacy
 
@@ -433,7 +439,7 @@ def morph_from_tag(tag: str) -> ty.Dict[str, str]:
     pos, *rest = tag.split("__", maxsplit=1)
     if not rest:
         return dict()
-    return dict(feat.split("=") for feat in rest[0].split("|"))
+    return dict(ty.cast(ty.Tuple[str, str], feat.split("=")) for feat in rest[0].split("|"))
 
 
 def spans_for_sent(
@@ -582,7 +588,8 @@ class AntecedentFeaturesDict(TypedDict):
 def antecedents_from_doc(
     text_doc: etree._ElementTree,
     annotations_doc: etree._ElementTree,
-    max_candidates: int = 100,
+    max_m_distance: ty.Optional[int] = None,
+    max_candidates: ty.Optional[int] = None,
     distance_buckets: ty.Sequence[int] = (1, 2, 3, 4, 5, 7, 15, 32, 63),
 ) -> ty.Dict[str, ty.Dict[str, AntecedentFeaturesDict]]:
     """Extract the antecedents dataset from an ANCOR TEI document."""
@@ -607,7 +614,10 @@ def antecedents_from_doc(
     for i, (s1, e1, mention) in mentions:
         mention_content_set = set(mention.content)
         chain = chain_from_mention.get(mention.identifier, None)
-        antecedent_candidates = sort_filt_units[max(0, i - max_candidates) : i]
+        if max_m_distance is None:
+            antecedent_candidates = sort_filt_units[:i]
+        else:
+            antecedent_candidates = sort_filt_units[max(0, i - max_m_distance) : i]
         antecedents: ty.Dict[str, AntecedentFeaturesDict] = dict()
         # FIXME: better idea: instead, add already consumed mentions to a stack and use **that** to
         # get candidates
@@ -654,14 +664,19 @@ def antecedents_from_doc(
                 "token_incl": token_incl_ratio,
                 "token_com": token_com_ratio,
             }
-        antecedents = {
-            k: v
-            for k, v in antecedents.items()
-            if v["coref"]
-            or v["m_distance"] == 0
-        }
-        for v in antecedents.values():
-            v["m_distance"] = 0
+        if max_candidates is not None and len(antecedents) > max_candidates:
+            candidates_priority = nlargest(
+                max_candidates,
+                ((k, v) for k, v in antecedents.items()),
+                key=(
+                    lambda x: (
+                        1 if x[1]["m_distance"] < 2 else 0,
+                        1 if x[1]["coref"] else 0,
+                        random.random(),
+                    )
+                ),
+            )
+            antecedents = dict(candidates_priority)
         res[mention.identifier] = antecedents
     return res
 
@@ -704,6 +719,8 @@ def main_entry_point(argv=None):
         arguments["--mentions"] = "-"
     if arguments["--antecedents"] is None:
         arguments["--antecedents"] = "-"
+    if arguments["--max-candidates"] is None:
+        arguments["--max-candidates"] = arguments["--max-m-dist"]
     strict_max_width = int(arguments["--max-width"])
 
     with smart_open(arguments["<xml-file>"], "rb") as in_stream:
@@ -737,7 +754,10 @@ def main_entry_point(argv=None):
             f"Skipping {skipped_mentions} out of {len(all_mentions)} mentions in {arguments['<xml-file>']}"
         )
     antecedents = antecedents_from_doc(
-        text_tree, annotations_tree, max_candidates=int(arguments["--max-candidates"])
+        text_tree,
+        annotations_tree,
+        max_m_distance=int(arguments["--max-m-dist"]),
+        max_candidates=int(arguments["--max-candidates"]),
     )
 
     if arguments["--det-ratio"] is not None:
