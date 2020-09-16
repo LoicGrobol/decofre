@@ -87,7 +87,7 @@ def generate_clusters(source_dir: pathlib.Path, target_dir: pathlib.Path):
 
 def process_split(root_dir: pathlib.Path):
     subcorpora = (
-        ("train", {"seed": 0, "ratio": 0.99, "max_m_distance": 128, "max_candidates": 16}),
+        ("train", {"seed": 0, "ratio": 0.99, "max_m_distance": 128, "max_candidates": 4}),
         ("dev", {"seed": 0, "max_m_distance": 128}),
         ("test", {"seed": 0, "max_m_distance": 128}),
     )
