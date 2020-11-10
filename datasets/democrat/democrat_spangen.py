@@ -439,7 +439,9 @@ def morph_from_tag(tag: str) -> ty.Dict[str, str]:
     pos, *rest = tag.split("__", maxsplit=1)
     if not rest:
         return dict()
-    return dict(ty.cast(ty.Tuple[str, str], feat.split("=")) for feat in rest[0].split("|"))
+    return dict(
+        ty.cast(ty.Tuple[str, str], feat.split("=")) for feat in rest[0].split("|")
+    )
 
 
 def spans_for_sent(
@@ -806,7 +808,8 @@ def main_entry_point(argv=None):
                     "mentions": all_mentions,
                     "antecedents": antecedents,
                     "args": dict(arguments),
-                }
+                },
+                option=orjson.OPT_INDENT_2,
             )
         )
 
