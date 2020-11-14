@@ -1,0 +1,780 @@
+{
+  "mentions": {
+    "u-MENTION-0": {
+      "content": [
+        "élèves",
+        "de",
+        "l'",
+        "éveil",
+        "musical"
+      ],
+      "left_context": [
+        "<start>",
+        "Les"
+      ],
+      "right_context": [
+        "ont",
+        ",",
+        "l'",
+        "espace",
+        "d'",
+        "un",
+        "spectacle",
+        ",",
+        "chassé",
+        "les"
+      ],
+      "length": 4,
+      "start": 1,
+      "end": 5,
+      "pos": [
+        "<start>",
+        "DET",
+        "NOUN",
+        "ADP",
+        "DET",
+        "NOUN",
+        "ADJ",
+        "AUX",
+        "PUNCT",
+        "DET",
+        "NOUN",
+        "ADP",
+        "DET",
+        "NOUN",
+        "PUNCT",
+        "VERB",
+        "DET"
+      ],
+      "lemma": [
+        "<start>",
+        "le",
+        "élève",
+        "de",
+        "le",
+        "éveil",
+        "musical",
+        "avoir",
+        ",",
+        "le",
+        "espace",
+        "de",
+        "un",
+        "spectacle",
+        ",",
+        "chasser",
+        "le"
+      ],
+      "morph": [
+        {},
+        {
+          "Definite": "Def",
+          "Number": "Plur",
+          "PronType": "Art"
+        },
+        {
+          "Number": "Plur"
+        },
+        {},
+        {
+          "Definite": "Def",
+          "Number": "Sing",
+          "PronType": "Art"
+        },
+        {
+          "Gender": "Masc",
+          "Number": "Sing"
+        },
+        {
+          "Gender": "Masc",
+          "Number": "Sing"
+        },
+        {
+          "Mood": "Ind",
+          "Number": "Plur",
+          "Person": "3",
+          "Tense": "Pres",
+          "VerbForm": "Fin"
+        },
+        {},
+        {
+          "Definite": "Def",
+          "Number": "Sing",
+          "PronType": "Art"
+        },
+        {
+          "Number": "Sing"
+        },
+        {},
+        {
+          "Definite": "Ind",
+          "Gender": "Masc",
+          "Number": "Sing",
+          "PronType": "Art"
+        },
+        {
+          "Gender": "Masc",
+          "Number": "Sing"
+        },
+        {},
+        {
+          "Gender": "Masc",
+          "Number": "Sing",
+          "Tense": "Past",
+          "VerbForm": "Part"
+        },
+        {
+          "Definite": "Def",
+          "Number": "Plur",
+          "PronType": "Art"
+        }
+      ],
+      "entity_type": null,
+      "chunk_inclusion": "included",
+      "type": "MENTION",
+      "new": "_",
+      "def": "_",
+      "id": "u-MENTION-0"
+    },
+    "u-MENTION-11": {
+      "content": [
+        "un",
+        "spectacle"
+      ],
+      "left_context": [
+        "élèves",
+        "de",
+        "l'",
+        "éveil",
+        "musical",
+        "ont",
+        ",",
+        "l'",
+        "espace",
+        "d'"
+      ],
+      "right_context": [
+        ",",
+        "chassé",
+        "les",
+        "êtres",
+        "légendaires",
+        "qui",
+        "les",
+        "empêchent",
+        "de",
+        "dormir"
+      ],
+      "length": 1,
+      "start": 11,
+      "end": 12,
+      "pos": [
+        "NOUN",
+        "ADP",
+        "DET",
+        "NOUN",
+        "ADJ",
+        "AUX",
+        "PUNCT",
+        "DET",
+        "NOUN",
+        "ADP",
+        "DET",
+        "NOUN",
+        "PUNCT",
+        "VERB",
+        "DET",
+        "NOUN",
+        "ADJ",
+        "PRON",
+        "PRON",
+        "VERB",
+        "ADP",
+        "VERB"
+      ],
+      "lemma": [
+        "élève",
+        "de",
+        "le",
+        "éveil",
+        "musical",
+        "avoir",
+        ",",
+        "le",
+        "espace",
+        "de",
+        "un",
+        "spectacle",
+        ",",
+        "chasser",
+        "le",
+        "être",
+        "légendaire",
+        "qui",
+        "le",
+        "empêcher",
+        "de",
+        "dormir"
+      ],
+      "morph": [
+        {
+          "Number": "Plur"
+        },
+        {},
+        {
+          "Definite": "Def",
+          "Number": "Sing",
+          "PronType": "Art"
+        },
+        {
+          "Gender": "Masc",
+          "Number": "Sing"
+        },
+        {
+          "Gender": "Masc",
+          "Number": "Sing"
+        },
+        {
+          "Mood": "Ind",
+          "Number": "Plur",
+          "Person": "3",
+          "Tense": "Pres",
+          "VerbForm": "Fin"
+        },
+        {},
+        {
+          "Definite": "Def",
+          "Number": "Sing",
+          "PronType": "Art"
+        },
+        {
+          "Number": "Sing"
+        },
+        {},
+        {
+          "Definite": "Ind",
+          "Gender": "Masc",
+          "Number": "Sing",
+          "PronType": "Art"
+        },
+        {
+          "Gender": "Masc",
+          "Number": "Sing"
+        },
+        {},
+        {
+          "Gender": "Masc",
+          "Number": "Sing",
+          "Tense": "Past",
+          "VerbForm": "Part"
+        },
+        {
+          "Definite": "Def",
+          "Number": "Plur",
+          "PronType": "Art"
+        },
+        {
+          "Gender": "Masc",
+          "Number": "Plur"
+        },
+        {
+          "Number": "Plur"
+        },
+        {
+          "PronType": "Rel"
+        },
+        {
+          "Number": "Plur",
+          "Person": "3"
+        },
+        {
+          "Mood": "Ind",
+          "Number": "Plur",
+          "Person": "3",
+          "Tense": "Pres",
+          "VerbForm": "Fin"
+        },
+        {},
+        {
+          "VerbForm": "Inf"
+        }
+      ],
+      "entity_type": null,
+      "chunk_inclusion": "included",
+      "type": "MENTION",
+      "new": "_",
+      "def": "_",
+      "id": "u-MENTION-11"
+    },
+    "u-MENTION-14": {
+      "content": [
+        "les",
+        "êtres",
+        "légendaires"
+      ],
+      "left_context": [
+        "musical",
+        "ont",
+        ",",
+        "l'",
+        "espace",
+        "d'",
+        "un",
+        "spectacle",
+        ",",
+        "chassé"
+      ],
+      "right_context": [
+        "qui",
+        "les",
+        "empêchent",
+        "de",
+        "dormir",
+        ".",
+        "<end>"
+      ],
+      "length": 2,
+      "start": 15,
+      "end": 17,
+      "pos": [
+        "ADJ",
+        "AUX",
+        "PUNCT",
+        "DET",
+        "NOUN",
+        "ADP",
+        "DET",
+        "NOUN",
+        "PUNCT",
+        "VERB",
+        "DET",
+        "NOUN",
+        "ADJ",
+        "PRON",
+        "PRON",
+        "VERB",
+        "ADP",
+        "VERB",
+        "PUNCT",
+        "<end>"
+      ],
+      "lemma": [
+        "musical",
+        "avoir",
+        ",",
+        "le",
+        "espace",
+        "de",
+        "un",
+        "spectacle",
+        ",",
+        "chasser",
+        "le",
+        "être",
+        "légendaire",
+        "qui",
+        "le",
+        "empêcher",
+        "de",
+        "dormir",
+        ".",
+        "<end>"
+      ],
+      "morph": [
+        {
+          "Gender": "Masc",
+          "Number": "Sing"
+        },
+        {
+          "Mood": "Ind",
+          "Number": "Plur",
+          "Person": "3",
+          "Tense": "Pres",
+          "VerbForm": "Fin"
+        },
+        {},
+        {
+          "Definite": "Def",
+          "Number": "Sing",
+          "PronType": "Art"
+        },
+        {
+          "Number": "Sing"
+        },
+        {},
+        {
+          "Definite": "Ind",
+          "Gender": "Masc",
+          "Number": "Sing",
+          "PronType": "Art"
+        },
+        {
+          "Gender": "Masc",
+          "Number": "Sing"
+        },
+        {},
+        {
+          "Gender": "Masc",
+          "Number": "Sing",
+          "Tense": "Past",
+          "VerbForm": "Part"
+        },
+        {
+          "Definite": "Def",
+          "Number": "Plur",
+          "PronType": "Art"
+        },
+        {
+          "Gender": "Masc",
+          "Number": "Plur"
+        },
+        {
+          "Number": "Plur"
+        },
+        {
+          "PronType": "Rel"
+        },
+        {
+          "Number": "Plur",
+          "Person": "3"
+        },
+        {
+          "Mood": "Ind",
+          "Number": "Plur",
+          "Person": "3",
+          "Tense": "Pres",
+          "VerbForm": "Fin"
+        },
+        {},
+        {
+          "VerbForm": "Inf"
+        },
+        {},
+        {}
+      ],
+      "entity_type": null,
+      "chunk_inclusion": "included",
+      "type": "MENTION",
+      "new": "_",
+      "def": "_",
+      "id": "u-MENTION-14"
+    },
+    "u-MENTION-15": {
+      "content": [
+        "qui"
+      ],
+      "left_context": [
+        "l'",
+        "espace",
+        "d'",
+        "un",
+        "spectacle",
+        ",",
+        "chassé",
+        "les",
+        "êtres",
+        "légendaires"
+      ],
+      "right_context": [
+        "les",
+        "empêchent",
+        "de",
+        "dormir",
+        ".",
+        "<end>"
+      ],
+      "length": 0,
+      "start": 18,
+      "end": 18,
+      "pos": [
+        "DET",
+        "NOUN",
+        "ADP",
+        "DET",
+        "NOUN",
+        "PUNCT",
+        "VERB",
+        "DET",
+        "NOUN",
+        "ADJ",
+        "PRON",
+        "PRON",
+        "VERB",
+        "ADP",
+        "VERB",
+        "PUNCT",
+        "<end>"
+      ],
+      "lemma": [
+        "le",
+        "espace",
+        "de",
+        "un",
+        "spectacle",
+        ",",
+        "chasser",
+        "le",
+        "être",
+        "légendaire",
+        "qui",
+        "le",
+        "empêcher",
+        "de",
+        "dormir",
+        ".",
+        "<end>"
+      ],
+      "morph": [
+        {
+          "Definite": "Def",
+          "Number": "Sing",
+          "PronType": "Art"
+        },
+        {
+          "Number": "Sing"
+        },
+        {},
+        {
+          "Definite": "Ind",
+          "Gender": "Masc",
+          "Number": "Sing",
+          "PronType": "Art"
+        },
+        {
+          "Gender": "Masc",
+          "Number": "Sing"
+        },
+        {},
+        {
+          "Gender": "Masc",
+          "Number": "Sing",
+          "Tense": "Past",
+          "VerbForm": "Part"
+        },
+        {
+          "Definite": "Def",
+          "Number": "Plur",
+          "PronType": "Art"
+        },
+        {
+          "Gender": "Masc",
+          "Number": "Plur"
+        },
+        {
+          "Number": "Plur"
+        },
+        {
+          "PronType": "Rel"
+        },
+        {
+          "Number": "Plur",
+          "Person": "3"
+        },
+        {
+          "Mood": "Ind",
+          "Number": "Plur",
+          "Person": "3",
+          "Tense": "Pres",
+          "VerbForm": "Fin"
+        },
+        {},
+        {
+          "VerbForm": "Inf"
+        },
+        {},
+        {}
+      ],
+      "entity_type": null,
+      "chunk_inclusion": "included",
+      "type": "MENTION",
+      "new": "_",
+      "def": "_",
+      "id": "u-MENTION-15"
+    },
+    "u-MENTION-1": {
+      "content": [
+        "les"
+      ],
+      "left_context": [
+        "espace",
+        "d'",
+        "un",
+        "spectacle",
+        ",",
+        "chassé",
+        "les",
+        "êtres",
+        "légendaires",
+        "qui"
+      ],
+      "right_context": [
+        "empêchent",
+        "de",
+        "dormir",
+        ".",
+        "<end>"
+      ],
+      "length": 0,
+      "start": 19,
+      "end": 19,
+      "pos": [
+        "NOUN",
+        "ADP",
+        "DET",
+        "NOUN",
+        "PUNCT",
+        "VERB",
+        "DET",
+        "NOUN",
+        "ADJ",
+        "PRON",
+        "PRON",
+        "VERB",
+        "ADP",
+        "VERB",
+        "PUNCT",
+        "<end>"
+      ],
+      "lemma": [
+        "espace",
+        "de",
+        "un",
+        "spectacle",
+        ",",
+        "chasser",
+        "le",
+        "être",
+        "légendaire",
+        "qui",
+        "le",
+        "empêcher",
+        "de",
+        "dormir",
+        ".",
+        "<end>"
+      ],
+      "morph": [
+        {
+          "Number": "Sing"
+        },
+        {},
+        {
+          "Definite": "Ind",
+          "Gender": "Masc",
+          "Number": "Sing",
+          "PronType": "Art"
+        },
+        {
+          "Gender": "Masc",
+          "Number": "Sing"
+        },
+        {},
+        {
+          "Gender": "Masc",
+          "Number": "Sing",
+          "Tense": "Past",
+          "VerbForm": "Part"
+        },
+        {
+          "Definite": "Def",
+          "Number": "Plur",
+          "PronType": "Art"
+        },
+        {
+          "Gender": "Masc",
+          "Number": "Plur"
+        },
+        {
+          "Number": "Plur"
+        },
+        {
+          "PronType": "Rel"
+        },
+        {
+          "Number": "Plur",
+          "Person": "3"
+        },
+        {
+          "Mood": "Ind",
+          "Number": "Plur",
+          "Person": "3",
+          "Tense": "Pres",
+          "VerbForm": "Fin"
+        },
+        {},
+        {
+          "VerbForm": "Inf"
+        },
+        {},
+        {}
+      ],
+      "entity_type": null,
+      "chunk_inclusion": "included",
+      "type": "MENTION",
+      "new": "_",
+      "def": "_",
+      "id": "u-MENTION-1"
+    }
+  },
+  "antecedents": {
+    "u-MENTION-1": {
+      "u-MENTION-0": {
+        "w_distance": 6,
+        "u_distance": 0,
+        "m_distance": 3,
+        "spk_agreement": true,
+        "overlap": false,
+        "coref": true,
+        "token_incl": 0,
+        "token_com": 0
+      },
+      "u-MENTION-11": {
+        "w_distance": 5,
+        "u_distance": 0,
+        "m_distance": 2,
+        "spk_agreement": true,
+        "overlap": false,
+        "coref": false,
+        "token_incl": 0,
+        "token_com": 0
+      },
+      "u-MENTION-14": {
+        "w_distance": 1,
+        "u_distance": 0,
+        "m_distance": 1,
+        "spk_agreement": true,
+        "overlap": false,
+        "coref": false,
+        "token_incl": 10,
+        "token_com": 3
+      },
+      "u-MENTION-15": {
+        "w_distance": 0,
+        "u_distance": 0,
+        "m_distance": 0,
+        "spk_agreement": true,
+        "overlap": false,
+        "coref": false,
+        "token_incl": 0,
+        "token_com": 0
+      }
+    }
+  },
+  "args": {
+    "--help": false,
+    "--buckets": false,
+    "--context": "10",
+    "--det-ratio": "0.99",
+    "--keep-single": false,
+    "--keep-named-entities": false,
+    "--keep-name-chunks": false,
+    "--max-m-dist": "32",
+    "--max-candidates": "32",
+    "--max-width": "32",
+    "--seed": "0",
+    "<xml-file>": "/home/lgrobol/Documents/nlp/dev/decofre/datasets/democrat/data/democrat/train/ge_ungroupped-estrepublicain-1-000_000.xml",
+    "<urs-file>": "/home/lgrobol/Documents/nlp/dev/decofre/datasets/democrat/data/democrat/train/ge_ungroupped-estrepublicain-1-000_000-urs.xml",
+    "--mentions": "/home/lgrobol/Documents/nlp/dev/decofre/datasets/democrat/local/processed/train/mentions/ge_ungroupped-estrepublicain-1-000_000.json",
+    "--antecedents": "/home/lgrobol/Documents/nlp/dev/decofre/datasets/democrat/local/processed/train/antecedents/ge_ungroupped-estrepublicain-1-000_000.json"
+  }
+}
