@@ -18,7 +18,6 @@ import tqdm
 from loguru import logger
 
 import boltons.iterutils as itu
-from torch.optim import AdamW
 
 from decofre import datatools
 from decofre.utils import PRF, confusion
