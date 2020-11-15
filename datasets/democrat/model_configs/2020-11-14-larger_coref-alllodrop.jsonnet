@@ -4,6 +4,8 @@
     word_embeddings_dim: 300,
     chars_embeddings_dim: 50,
     hidden_dim: 300,
+    soft_dropout_rate: 0.2,
+    hard_dropout_rate: 0.2,
     features: [
       {
         name: 'length',
@@ -19,7 +21,7 @@
   scorer: {
     ffnn_dim: 300,
     dropout: 0.2,
-    mention_new: 'zero',
+    mention_new: 'from_refined',
     features: [
       {
         name: 'w_distance',
