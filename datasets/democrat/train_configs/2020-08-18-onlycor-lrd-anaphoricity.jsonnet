@@ -13,6 +13,8 @@
     epochs: 50,
     patience: 5,
     lr: '1e-4',
+    'lr-schedule': 'step',
+    'score-anaphoricity': true,
     'train-file': 'file:/../local/processed/train/antecedents/',
     'dev-file': 'file:/../local/processed/dev/antecedents/',
     'test-file': 'file:/../local/processed/test/antecedents/',

@@ -11,6 +11,8 @@
   'antecedent-scoring': {
     epochs: 2,
     lr: '1e-4',
+    'lr-schedule': 'step',
+    'score-anaphoricity': true,
     'train-file': 'file:/full/antecedents/',
     'dev-file': 'file:/full/antecedents/',
     'test-file': 'file:/full/antecedents/',
