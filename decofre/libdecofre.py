@@ -198,8 +198,7 @@ class FFNN(torch.jit.ScriptModule):
 
 class CategoricalFeaturesBag(torch.jit.ScriptModule):
     def __init__(
-        self,
-        features: ty.Iterable[ty.Tuple[int, int, ty.Optional[torch.Tensor]]],
+        self, features: ty.Iterable[ty.Tuple[int, int, ty.Optional[torch.Tensor]]],
     ):
         super().__init__()
         embeddings = torch.nn.ModuleList()
@@ -252,9 +251,7 @@ class SeqEncoder(torch.nn.Module):
         self.padding_idx = vocab_size
         if pretrained_embeddings is None:
             self.embeddings = torch.nn.Embedding(
-                vocab_size + 1,
-                self.embeddings_dim,
-                padding_idx=self.padding_idx,
+                vocab_size + 1, self.embeddings_dim, padding_idx=self.padding_idx,
             )
         else:
             augmented_embeddings = torch.zeros(
