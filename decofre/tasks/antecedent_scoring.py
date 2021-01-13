@@ -91,6 +91,7 @@ def train_cor(
     trainer_cls=runners.SinkTrainer,
     num_workers: int = 0,
     debug: bool = False,
+    config: ty.Optional[ty.Dict[str, ty.Any]] = None,
     **kwargs,
 ) -> ty.Tuple[ignite.engine.Engine, ty.Iterable, ty.Dict[str, ty.Any]]:
     logger.info("Training antecedent scoring")
@@ -172,6 +173,18 @@ def train_cor(
         debug=debug,
         **kwargs,
     )
+    if config["lr-schedule"] == "step":
+        logger.debug("Training with 'step' LR schedule, using γ=0.95")
+        torch_lr_scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer, len(train_loader), gamma=0.95
+        )
+        scheduler = ignite.contrib.handlers.create_lr_scheduler_with_warmup(
+            torch_lr_scheduler,
+            warmup_start_value=0.0,
+            warmup_end_value=optimizer.defaults["lr"],
+            warmup_duration=1000,
+        )
+        cor_trainer.add_event_handler(ignite.engine.Events.ITERATION_STARTED, scheduler)
 
     return (
         cor_trainer,
@@ -295,15 +308,15 @@ def attributions(scores: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
     _, highest_scores_indices = torch.max(scores, dim=-1)
     sys_new = highest_scores_indices.eq(0)
     gold_new = targets.narrow(-1, 0, 1).squeeze()
-    true_new = gold_new & sys_new
-    false_new = gold_new.logical_not() & sys_new
-    false_link = gold_new & sys_new.logical_not()
+    true_new = gold_new.logical_and(sys_new)
+    false_new = gold_new.logical_not().logical_and(sys_new)
+    false_link = gold_new.logical_and(sys_new.logical_not())
     argmax_mask = torch.nn.functional.one_hot(
         highest_scores_indices, num_classes=scores.size(-1)
     ).to(torch.bool)
     correct = targets.masked_select(argmax_mask)
-    correct_link = correct & true_new.logical_not()
-    wrong_link = (correct | false_new | false_link).logical_not()
+    correct_link = correct.logical_and(true_new.logical_not())
+    wrong_link = correct.logical_or(false_new).logical_or(false_link).logical_not()
 
     outpt = torch.stack((true_new, false_new, correct_link, false_link, wrong_link))
     outpt = outpt.sum(dim=-1)

@@ -4,7 +4,6 @@ import pathlib
 import tempfile
 import shutil
 
-import itertools as it
 import typing as ty
 
 from collections import Counter
@@ -16,6 +15,8 @@ import torch
 
 # Suppress tf messages at loading time
 import logging
+
+from transformers.tokenization_utils_base import TokenSpan
 
 logging.getLogger("tensorflow").setLevel(logging.ERROR)  # noqa: E402
 import transformers
@@ -213,6 +214,8 @@ class ContextFreeEncoder(Encoder):
                     lexicon.dump(f["lexicon"], tempdir / lexicon_filename)
                 elif digitization == "word":
                     lexicon_filename = "words.lexicon"
+                else:
+                    raise ValueError(f"Unknown digitization {digitization!r}")
                 f["lexicon"] = lexicon_filename
 
             # FIXME: deduplicate please
@@ -247,6 +250,8 @@ class ContextFreeEncoder(Encoder):
                 "hidden_dim": self.model.span_encoder.hidden_dim,
                 "features": features_dump,
                 "token_features": token_features_dump,
+                "soft_dropout_rate": self.model.span_encoder.soft_drop.p,
+                "hard_dropout_rate": self.model.span_encoder.hard_drop.p,
             }
             with open(tempdir / "config.json", "w") as config_stream:
                 json.dump(encoder_config, config_stream)
@@ -318,6 +323,8 @@ class ContextFreeEncoder(Encoder):
         word_embeddings_dim: int,
         chars_embeddings_dim: int,
         hidden_dim: int,
+        soft_dropout_rate: float = 0.2,
+        hard_dropout_rate: float = 0.2,
         features: ty.Optional[ty.Iterable[ty.Dict[str, ty.Any]]] = None,
         token_features: ty.Optional[ty.Iterable[ty.Dict[str, ty.Any]]] = None,
         embeddings: ty.Optional[torch.Tensor] = None,
@@ -361,6 +368,8 @@ class ContextFreeEncoder(Encoder):
             ffnn_dim=hidden_dim,
             out_dim=span_encoding_dim,
             external_boundaries=external_boundaries,
+            soft_dropout_rate=soft_dropout_rate,
+            hard_dropout_rate=hard_dropout_rate,
         )
 
         features_encoder: ty.Optional[libdecofre.CategoricalFeaturesBag]
@@ -652,6 +661,34 @@ if elmo is not None:
             )
 
 
+def align_with_special_tokens(
+    word_lengths: ty.Sequence[int],
+    mask=ty.Sequence[int],
+    special_tokens_code: int = 1,
+    sequence_tokens_code: int = 0,
+) -> ty.List[TokenSpan]:
+    """Provide a word→subwords alignements using an encoded sentence special tokens mask.
+    This is only useful for the non-fast 🤗 tokenizers, since the fast ones have native APIs to do
+    that, we also return 🤗 )`TokenSpan`s for compatibility with this API.
+    """
+    res: ty.List[TokenSpan] = []
+    pos = 0
+    for length in word_lengths:
+        while mask[pos] == special_tokens_code:
+            pos += 1
+        word_end = pos + length
+        if any(token_type != sequence_tokens_code for token_type in mask[pos:word_end]):
+            raise ValueError(
+                "mask incompatible with tokenization:"
+                f" needed {length} true tokens (1) at position {pos},"
+                f" got {mask[pos:word_end]} instead"
+            )
+        res.append(TokenSpan(pos, word_end))
+        pos = word_end
+
+    return res
+
+
 class BERTEncoder(Encoder):
     def __init__(
         self,
@@ -663,43 +700,54 @@ class BERTEncoder(Encoder):
         super().__init__(model, model.out_dim, features, features_digitizers)
         self.pretrained = pretrained
         self.tokenizer = transformers.AutoTokenizer.from_pretrained(
-            self.pretrained, do_lowercase_and_remove_accent=False, use_fast=True
+            self.pretrained, use_fast=True
         )
+        # Shim for the weird idiosyncrasies of the RoBERTa tokenizer
+        if isinstance(self.tokenizer, transformers.GPT2TokenizerFast):
+            self.tokenizer = transformers.AutoTokenizer.from_pretrained(
+                self.pretrained, use_fast=True, add_prefix_space=True
+            )
 
     def digitize(
         self, span: ty.Mapping[str, ty.Union[str, int, ty.Sequence[str]]]
     ) -> datatools.FeaturefulSpan:
         """Digitize a span."""
         left_context = ty.cast(ty.Sequence[str], span["left_context"])
-        tokenized_left_context = [
-            piece for token in left_context for piece in self.tokenizer.tokenize(token)
-        ]
         content = ty.cast(ty.Sequence[str], span["content"])
-        tokenized_content = [
-            piece for token in content for piece in self.tokenizer.tokenize(token)
-        ]
         right_context = ty.cast(ty.Sequence[str], span["right_context"])
-        tokenized_right_context = [
-            piece for token in right_context for piece in self.tokenizer.tokenize(token)
-        ]
+        span_with_context = [*left_context, *content, *right_context]
 
-        pieces = [*tokenized_left_context, *tokenized_content, *tokenized_right_context]
-        encoded = self.tokenizer.encode_plus(
-            pieces,
-            add_special_tokens=True,
-            return_special_tokens_mask=True,
-            return_tensors="pt",
-        )
-        # Mask processing to get the correct boundary indices, this could probably be made more
-        # efficient if/when we get a saner api for BERT digitization
-        shift = self.shift_from_mask(encoded["special_tokens_mask"])
+        if self.tokenizer.is_fast:
+            encoded = self.tokenizer(
+                span_with_context,
+                is_split_into_words=True,
+                return_special_tokens_mask=True,
+            )
+            span_boundaries = (
+                encoded.word_to_tokens(len(left_context)).start,
+                encoded.word_to_tokens(len(left_context) + len(content)).end,
+            )
+        else:
+            bert_tokens = [
+                self.tokenizer.tokenize(token) for token in span_with_context
+            ]
+            encoded = self.tokenizer.encode_plus(
+                [subtoken for token in bert_tokens for subtoken in token],
+                return_special_tokens_mask=True,
+            )
+            bert_word_lengths = [len(word) for word in bert_tokens]
+            alignments = align_with_special_tokens(
+                bert_word_lengths, encoded["special_tokens_mask"],
+            )
+            span_boundaries = (
+                alignments[len(left_context)].start,
+                alignments[len(left_context) + len(content)].end,
+            )
         # FIXME: :art:
-        span_boundaries = (
-            shift + len(tokenized_left_context),
-            shift + len(tokenized_left_context) + len(tokenized_content),
-        )
         feats = self.digitize_feats(span)
-        return datatools.FeaturefulSpan(encoded["input_ids"], span_boundaries, feats)
+        return datatools.FeaturefulSpan(
+            torch.tensor(encoded["input_ids"]), span_boundaries, feats
+        )
 
     def save(self, path: ty.Union[str, pathlib.Path]):
         """Save as a model archive."""
@@ -716,13 +764,15 @@ class BERTEncoder(Encoder):
                 if digitization == "lexicon":
                     lexicon_filename = f"{f['name']}.lexicon"
                     lexicon.dump(f["lexicon"], tempdir / lexicon_filename)
-                f["lexicon"] = lexicon_filename
+                    f["lexicon"] = lexicon_filename
 
             encoder_config = {
                 "type": "bert",
                 "span_encoding_dim": self.model.out_dim,
                 "hidden_dim": self.model.span_encoder.hidden_dim,
                 "features": features_dump,
+                "soft_dropout_rate": self.model.span_encoder.soft_drop.p,
+                "hard_dropout_rate": self.model.span_encoder.hard_drop.p,
                 "pretrained": self.pretrained,
             }
             with open(tempdir / "config.json", "w") as config_stream:
@@ -778,10 +828,11 @@ class BERTEncoder(Encoder):
         span_encoding_dim: int,
         hidden_dim: int,
         features: ty.Iterable[ty.Dict[str, ty.Any]] = None,
-        embeddings: ty.Optional[torch.Tensor] = None,
         external_boundaries: bool = False,
         fine_tune: bool = False,
         combine_layers: ty.Optional[ty.Sequence[int]] = None,
+        soft_dropout_rate: float = 0.2,
+        hard_dropout_rate: float = 0.2,
         project: bool = False,
         **kwargs,
     ) -> libdecofre.FeaturefulSpanEncoder:
@@ -798,6 +849,8 @@ class BERTEncoder(Encoder):
             ffnn_dim=hidden_dim,
             out_dim=span_encoding_dim,
             external_boundaries=external_boundaries,
+            soft_dropout_rate=soft_dropout_rate,
+            hard_dropout_rate=hard_dropout_rate,
         )
 
         if features is None:
@@ -833,10 +886,3 @@ class BERTEncoder(Encoder):
             pretrained=model_config["pretrained"],
         )
 
-    @staticmethod
-    def shift_from_mask(mask: ty.Iterable[int]) -> int:
-        values, lengths = zip(*((k, sum(1 for _ in g)) for k, g in it.groupby(mask)))
-        # TODO: THIS IS THE OPPOSITE OF THE DOC BUT CONSISTENT WITH THE cODE WHAT THE HELL
-        if values != (1, 0, 1):
-            raise ValueError("Invalid mask")
-        return lengths[0]

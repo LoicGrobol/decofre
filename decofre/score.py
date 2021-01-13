@@ -5,8 +5,9 @@ Usage:
   score [options] <model> <dataset> [<output>]
 
 Options:
-  --device <d>      The device to use for computations (defaults to `cuda:0` or `cpu`)
-  -h, --help  Show this screen.
+  --pretty      Output pretty JSON
+  --device <d>  The device to use for computations (defaults to `cuda:0` or `cpu`)
+  -h, --help    Show this screen.
 """
 import contextlib
 import json
@@ -126,7 +127,12 @@ def main_entry_point(argv=None):
         }
 
     with smart_open(arguments["<output>"], "w") as out_stream:
-        json.dump(out_dict, out_stream, ensure_ascii=False)
+        json.dump(
+            out_dict,
+            out_stream,
+            ensure_ascii=False,
+            indent=2 if arguments["--pretty"] else None,
+        )
 
 
 if __name__ == "__main__":

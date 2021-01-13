@@ -141,12 +141,14 @@ class Scorer(Model):
         encoder: Encoder,
         features: ty.Sequence[ty.Dict[str, ty.Any]],
         features_digitizers: ty.Dict[str, utils.Digitizer],
+        model_config: ty.Dict[str, ty.Any],
     ):
         self.model = model
         self.encoder = encoder
         self.digitize_span = self.encoder.digitize
         self._features = features
         self._feature_digitizers = features_digitizers
+        self.model_config = model_config
 
     def get_pair_feats(
         self, row: ty.Mapping[str, ty.Union[str, ty.Iterable[str]]]
@@ -172,8 +174,10 @@ class Scorer(Model):
                     lexicon.dump(f["lexicon"], tempdir / lexicon_filename)
                 elif digitization == "word":
                     lexicon_filename = "words.lexicon"
+                else:
+                    raise ValueError(f"Unknown digitization type: {digitization!r}")
                 f["lexicon"] = lexicon_filename
-            model_config = {"features": features_dump}
+            model_config = {"features": features_dump, **self.model_config}
 
             with open(tempdir / "config.json", "w") as config_stream:
                 json.dump(model_config, config_stream)
@@ -196,7 +200,7 @@ class Scorer(Model):
                         json.load(config_stream)
                     )
 
-                features = model_config["features"]
+                features = model_config.pop("features")
                 for f in features:
                     digitization = f.get("digitization", None)
                     if digitization == "lexicon":
@@ -207,7 +211,9 @@ class Scorer(Model):
                             raise ValueError(f"{type(encoder)} has no word lexicon")
                 feature_digitizers = utils.get_digitizers(features)
 
-                model = cls.default_model(encoder=encoder.model, features=features)
+                model = cls.default_model(
+                    encoder=encoder.model, features=features, config=model_config
+                )
                 weights = torch.load(tempdir / "weights.dat", map_location="cpu")
             except FileNotFoundError as e:
                 raise InvalidModelException(f"Files missing in {model_path}") from e
@@ -218,12 +224,14 @@ class Scorer(Model):
                 encoder=encoder,
                 features=features,
                 features_digitizers=feature_digitizers,
+                model_config=model_config,
             )
 
     @staticmethod
     def default_model(
         encoder: libdecofre.FeaturefulSpanEncoder,
         features: ty.Optional[ty.Sequence[ty.Mapping[str, ty.Any]]] = None,
+        config: ty.Optional[ty.Dict[str, ty.Any]] = None,
     ):
         if features is None:
             raise NotImplementedError("Featureless scorer not yet supported")
@@ -243,11 +251,14 @@ class Scorer(Model):
                 features_lst.append(
                     (f["vocabulary_size"], f["embeddings_dim"], weights)
                 )
+        if config is None:
+            config = dict()
 
         scor = libdecofre.CorefScorer(
             span_encoder=encoder,
             span_encoding_dim=encoder.out_dim,
             features=features_lst,
+            **config,
         )
         return scor
 
@@ -261,15 +272,20 @@ class Scorer(Model):
         """Create a new scorer from a model config and weights/lexicons initialisation."""
         words_lexicon = getattr(encoder, "_words_lexicon", None)
         features = config.load_features(
-            model_config["features"], initialisation["lexicon-source"], words_lexicon
+            model_config.pop("features"),
+            initialisation["lexicon-source"],
+            words_lexicon,
         )
         features_digitizers = utils.get_digitizers(features)
-        model = cls.default_model(encoder=encoder.model, features=features)
+        model = cls.default_model(
+            encoder=encoder.model, features=features, config=model_config
+        )
         return cls(
             model=model,
             encoder=encoder,
             features=features,
             features_digitizers=features_digitizers,
+            model_config=model_config,
         )
 
 

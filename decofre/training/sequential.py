@@ -1,10 +1,9 @@
 from collections import defaultdict
+from decofre import libdecofre
 
 from loguru import logger
 
-# FIXME: change this to use torch.optim.AdamW as soon as
-# the support is the same
-from decofre.optimizers import DenseSparseAdamW
+from torch.optim import AdamW
 
 from decofre.tasks import antecedent_scoring, mention_detection
 
@@ -47,7 +46,7 @@ def train(det, cor, config, out_dir, device, num_workers: int = 0, debug: bool =
 
     if config.get("antecedent-scoring", {}).get("epochs", 0) > 0:
         cor_config = defaultdict(lambda: None, config["antecedent-scoring"])
-        cor_optim = DenseSparseAdamW(
+        cor_optim = AdamW(
             filter(lambda x: x.requires_grad, cor.model.parameters()),
             lr=cor_config["lr"],
             weight_decay=cor_config["weight-decay"],
@@ -55,6 +54,22 @@ def train(det, cor, config, out_dir, device, num_workers: int = 0, debug: bool =
         logger.debug(
             f"Training the following parameters: {[n for n, p in cor.model.named_parameters() if p.requires_grad]}"
         )
+        if cor_config["score-anaphoricity"]:
+
+            def loss_fun(source, target):
+                return libdecofre.masked_multi_cross_entropy(
+                    source.to(device=device), target.to(device=device)
+                ) + libdecofre.anaphoricity_margin_loss(
+                    source.to(device=device), target.to(device=device)
+                )
+
+        else:
+
+            def loss_fun(source, target):
+                return libdecofre.masked_multi_cross_entropy(
+                    source.to(device=device), target.to(device=device)
+                )
+
         try:
             antecedent_scoring.train_eval(
                 model=cor.model,
@@ -74,6 +89,7 @@ def train(det, cor, config, out_dir, device, num_workers: int = 0, debug: bool =
                         out_dir / f"coref-interrupt-{s.epoch}-{s.iteration}.model"
                     )
                 ],
+                config=config["antecedent-scoring"]
             )
             cor.save(out_dir / "coref.model")
         except BaseException as e:

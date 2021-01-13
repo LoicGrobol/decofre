@@ -10,13 +10,12 @@ import ignite.engine
 import torch
 
 from loguru import logger
+from torch.optim import AdamW
 
 from decofre import datatools
 from decofre import lexicon
 from decofre import libdecofre
 from decofre import runners
-
-from decofre.optimizers import DenseSparseAdamW
 
 
 # FIXME: make something with loss_fun or remove it
@@ -184,7 +183,7 @@ def train_det(
         output_transform=runners.extract_output,
         aggregates={"mentions": [t for t in types_lex.i2t if t is not None]},
     )
-    optimizer = DenseSparseAdamW(
+    optimizer = AdamW(
         filter(lambda x: x.requires_grad, model.parameters()),
         lr=config["lr"],
         weight_decay=config["weight-decay"],
@@ -202,9 +201,9 @@ def train_det(
         **kwargs,
     )
     if config["lr-schedule"] == "step":
-        logger.debug("Training with 'step' LR schedule, using γ=0.7")
+        logger.debug("Training with 'step' LR schedule, using γ=0.95")
         torch_lr_scheduler = torch.optim.lr_scheduler.StepLR(
-            optimizer, len(train_loader), gamma=0.7
+            optimizer, len(train_loader), gamma=0.95
         )
         scheduler = ignite.contrib.handlers.create_lr_scheduler_with_warmup(
             torch_lr_scheduler,

@@ -8,6 +8,8 @@ import schema
 from decofre import lexicon
 from decofre.models import utils
 
+# NOTE: this whole thing is the mess, that way of making configs is awful, I am so sorry
+
 raw_features_schema = schema.Schema(
     {"name": str, "vocabulary_size": schema.Use(int), "embeddings_dim": schema.Use(int)}
 )
@@ -30,6 +32,8 @@ context_free_encoder_schema = schema.Schema(
         "word_embeddings_dim": schema.Use(int),
         "chars_embeddings_dim": schema.Use(int),
         "hidden_dim": schema.Use(int),
+        schema.Optional("soft_dropout_rate", default=0.3): schema.Use(float),
+        schema.Optional("hard_dropout_rate", default=0.6): schema.Use(float),
         schema.Optional("features", default=None): [
             schema.Or(raw_features_schema, categorical_features_schema)
         ],
@@ -37,6 +41,7 @@ context_free_encoder_schema = schema.Schema(
             schema.Or(raw_features_schema, categorical_features_schema)
         ],
         schema.Optional("external_boundaries", default=False): schema.Use(bool),
+
     }
 )
 
@@ -59,6 +64,8 @@ bert_encoder_schema = schema.Schema(
         "type": "bert",
         "span_encoding_dim": schema.Use(int),
         "pretrained": schema.Use(str),
+        schema.Optional("soft_dropout_rate", default=0.3): schema.Use(float),
+        schema.Optional("hard_dropout_rate", default=0.6): schema.Use(float),
         schema.Optional("project", default=False): bool,
         schema.Optional("fine_tune", default=False): bool,
         schema.Optional("combine_layers", default=None): [schema.Use(int)],
@@ -77,7 +84,8 @@ scorer_schema = schema.Schema(
     {
         schema.Optional("features"): [
             schema.Or(raw_features_schema, categorical_features_schema)
-        ]
+        ],
+        schema.Optional(str): object,
     }
 )
 

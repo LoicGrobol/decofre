@@ -18,18 +18,12 @@ import tqdm
 from loguru import logger
 
 import boltons.iterutils as itu
-
-from ignite._utils import _to_hours_mins_secs
+from torch.optim import AdamW
 
 from decofre import datatools
-from decofre.optimizers import DenseSparseAdamW
 from decofre.utils import PRF, confusion
 
 T = ty.TypeVar("T")
-
-
-class CustomEvents(enum.Enum):
-    LOGGING = "logging_event"
 
 
 def extract_output(output: ty.Mapping[str, ty.Any]):
@@ -238,7 +232,6 @@ class SinkTrainer(ignite.engine.Engine):
         ] = None,
     ):
         super().__init__(SinkTrainer._train_and_store_loss)
-        self.register_events(*CustomEvents)
         self.model = model
         self.loss_fun = loss_fun
         self.debug = debug
@@ -268,7 +261,7 @@ class SinkTrainer(ignite.engine.Engine):
         )
 
         if optimizer is None:
-            optimizer = DenseSparseAdamW(
+            optimizer = AdamW(
                 filter(lambda x: x.requires_grad, model.named_parameters())
             )
             logger.debug(

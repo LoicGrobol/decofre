@@ -12,7 +12,6 @@ import torch.nn
 import torch.nn.functional
 import torch.nn.parallel
 
-from loguru import logger
 from torch.nn.utils.rnn import pad_sequence
 from typing_extensions import Final, Literal
 
@@ -199,19 +198,17 @@ class FFNN(torch.jit.ScriptModule):
 
 class CategoricalFeaturesBag(torch.jit.ScriptModule):
     def __init__(
-        self,
-        features: ty.Iterable[ty.Tuple[int, int, ty.Optional[torch.Tensor]]],
-        sparse=True,
+        self, features: ty.Iterable[ty.Tuple[int, int, ty.Optional[torch.Tensor]]],
     ):
         super().__init__()
         embeddings = torch.nn.ModuleList()
         self.out_dim = 0
         for v, e, w in features:
             if w is None:
-                layer = torch.nn.Embedding(v, e, sparse=sparse)
+                layer = torch.nn.Embedding(v, e,)
                 torch.nn.init.xavier_normal_(layer.weight)
             else:
-                layer = torch.nn.Embedding.from_pretrained(w, sparse=sparse)
+                layer = torch.nn.Embedding.from_pretrained(w,)
             embeddings.append(layer)
             self.out_dim += e
 
@@ -254,10 +251,7 @@ class SeqEncoder(torch.nn.Module):
         self.padding_idx = vocab_size
         if pretrained_embeddings is None:
             self.embeddings = torch.nn.Embedding(
-                vocab_size + 1,
-                self.embeddings_dim,
-                sparse=True,
-                padding_idx=self.padding_idx,
+                vocab_size + 1, self.embeddings_dim, padding_idx=self.padding_idx,
             )
         else:
             augmented_embeddings = torch.zeros(
@@ -268,11 +262,9 @@ class SeqEncoder(torch.nn.Module):
             self.embeddings = torch.nn.Embedding.from_pretrained(
                 augmented_embeddings,
                 freeze=freeze_embeddings,
-                sparse=True,
                 padding_idx=self.padding_idx,
             )
 
-        self.drop = torch.nn.Dropout(0.3)
         self.rnn = torch.nn.GRU(
             self.embeddings_dim, self.hidden_dim, bidirectional=True
         )
@@ -286,7 +278,6 @@ class SeqEncoder(torch.nn.Module):
             padded, lengths, enforce_sorted=False
         )
         embedded = elementwise_apply(self.embeddings, packed)
-        embedded = elementwise_apply(self.drop, embedded)
         _, hidden = self.rnn(embedded)
         # Merge directions
         hidden = hidden.transpose(0, 1).reshape((len(lengths), 2 * self.hidden_dim))
@@ -335,7 +326,6 @@ class ContextFreeWordEncoder(torch.nn.Module):
             self.word_embeddings = torch.nn.Embedding(
                 words_vocab_size + 1,
                 self.words_embeddings_dim,
-                sparse=True,
                 padding_idx=self.word_padding_idx,
             )
         else:
@@ -347,7 +337,6 @@ class ContextFreeWordEncoder(torch.nn.Module):
             self.word_embeddings = torch.nn.Embedding.from_pretrained(
                 augmented_embeddings,
                 freeze=freeze_embeddings,
-                sparse=True,
                 padding_idx=self.word_padding_idx,
             )
 
@@ -400,6 +389,31 @@ if Elmo is not None:
             return WordEncoderOutput(embeddings["elmo_representations"][0], seq_lens)
 
 
+def freeze_module(module, freezing: bool = True):
+    """Make a `torch.nn.Module` either finetunable 🔥 or frozen ❄.
+    **WARNINGS**
+    - Freezing a module will put it in eval mode (since a frozen module can't be in training mode),
+      but unfreezing it will not put it back in training mode (since an unfrozen module still has an
+      eval mode that you might want to use), you have to do that yourself.
+    - Manually setting the submodules of a frozen module to train is not disabled, but if you want
+      to do that, writing a custom freezing function is probably a better idea.
+    - Freezing does not save the parameters `requires_grad`, so if some parameters do not require
+      grad even at training, this will mess that up. Again, in that case, write a custom function.
+    """
+
+    # This will replace the module's train function when freezing
+    def no_train(model, mode=True):
+        return model
+
+    if freezing:
+        module.eval()
+        module.train = no_train
+        module.requires_grad_(False)
+    else:
+        module.requires_grad_(True)
+        module.train = type(module).train
+
+
 class BERTWordEncoder(torch.nn.Module):
     """A word encoder using a pretrained transformer model as a base.
 
@@ -443,32 +457,16 @@ class BERTWordEncoder(torch.nn.Module):
         model_class: ty.Optional[transformers.PreTrainedModel] = None,
         fine_tune: bool = False,
         combine_layers: ty.Optional[ty.Sequence[int]] = None,
+        weight_layers: bool = False,
         project: bool = False,
     ):
         super().__init__()
         output_hidden_states = combine_layers is not None
-        if model_class is None or model_class == transformers.AutoModel:
-            # For automodels, we have to load the config first, see
-            # <https://github.com/huggingface/transformers/issues/2694>
-            model_config = transformers.AutoConfig.from_pretrained(
-                model_name_or_path, output_hidden_states=output_hidden_states
-            )
-            self.model = transformers.AutoModel.from_pretrained(
-                model_name_or_path, config=model_config
-            )
-        else:
-            self.model = model_class.from_pretrained(
-                model_name_or_path, output_hidden_states=output_hidden_states
-            )
-        if isinstance(self.model, transformers.BertModel):
-            self.hidden_state_indice_in_output = 2
-        elif isinstance(self.model, transformers.XLMModel):
-            self.hidden_state_indice_in_output = 1
-        else:
-            logger.warning(
-                f"Loading unknown model type {type(self.model)}, defaulting to BERT config"
-            )
-            self.hidden_state_indice_in_output = 2
+        if model_class is None:
+            model_class = transformers.AutoModel
+        self.model = model_class.from_pretrained(
+            model_name_or_path, output_hidden_states=output_hidden_states
+        )
 
         # We can't use layer drop when combining and quite frankly we should not use it in any case.
         if isinstance(self.model, transformers.FlaubertModel):
@@ -476,27 +474,26 @@ class BERTWordEncoder(torch.nn.Module):
 
         self.out_dim = self.model.config.hidden_size
         self.fine_tune = fine_tune
+        self.weight_layers = weight_layers
         # Normalize indices
         self.combine_layers: ty.Optional[ty.List[int]]
+        self.combination_scaling = torch.nn.Parameter(
+            torch.tensor([1.0]), requires_grad=False
+        )
         if combine_layers is not None:
             self.combine_layers = sorted(
                 n if n >= 0 else self.model.config.num_hidden_layers + n
                 for n in combine_layers
             )
-            combine_weights = torch.empty((len(self.combine_layers),))
-            combine_weights.normal_()
-            self.layer_weights = torch.nn.Parameter(combine_weights, requires_grad=True)
-            self.combination_scaling = torch.nn.Parameter(
-                torch.tensor([1.0]), requires_grad=True
+            self.layer_weights = torch.nn.Parameter(
+                torch.ones((len(self.combine_layers),)), requires_grad=False
             )
+            if self.weight_layers:
+                self.layer_weights.normal_()
+                self.layer_weights.requires_grad = True
+                self.combination_scaling.requires_grad = True
         else:
             self.combine_layers = None
-            self.layer_weights = torch.nn.Parameter(
-                torch.tensor([1.0]), requires_grad=False
-            )
-            self.combination_scaling = torch.nn.Parameter(
-                torch.tensor([1.0]), requires_grad=False
-            )
         self.project = project
         self.output_projection: torch.nn.Module
         if self.project:
@@ -504,23 +501,21 @@ class BERTWordEncoder(torch.nn.Module):
         else:
             self.output_projection = torch.nn.Identity()
         if not self.fine_tune:
-            self.model.eval()
-            for param in self.model.parameters():
-                param.requires_grad = False
+            freeze_module(self.model)
 
     @torch.jit.ignore
     def forward(self, pieces_ids: ty.Sequence[torch.Tensor]) -> WordEncoderOutput:
         # FIXME: this should be dealt with in digitize/collate (or should it ?)
-        seq_lens = torch.tensor([sent.shape[1] for sent in pieces_ids])
+        seq_lens = torch.tensor([sent.shape[0] for sent in pieces_ids])
         padded_pieces = pad_sequence(
             [c.squeeze(0) for c in pieces_ids], batch_first=True
         )
         attention_mask = self.make_attention_mask(seq_lens).to(padded_pieces.device)
         model_out = self.model(padded_pieces, attention_mask=attention_mask)
         if self.combine_layers is None:
-            embeddings = model_out[0]
+            embeddings = model_out.last_hidden_state
         else:
-            layers_out = model_out[self.hidden_state_indice_in_output]
+            layers_out = model_out.hidden_states
             extracted_layers = torch.stack(
                 [layers_out[n] for n in self.combine_layers], dim=0
             )
@@ -539,7 +534,9 @@ class BERTWordEncoder(torch.nn.Module):
 
     @classmethod
     def make_attention_mask(cls, seq_lens: torch.Tensor) -> torch.Tensor:
-        mask = torch.ones((seq_lens.shape[0], seq_lens.max().item()), dtype=torch.float64)
+        mask = torch.ones(
+            (seq_lens.shape[0], seq_lens.max().item()), dtype=torch.float64
+        )
         for i, l in enumerate(seq_lens):
             mask[i, l:] = 0.0
         return mask
@@ -615,8 +612,8 @@ class SpanEncoder(torch.nn.Module):
         out_dim: int,
         hidden_depth: int = 2,
         attention_heads: int = 2,
-        soft_dropout_rate: float = 0.3,
-        hard_dropout_rate: float = 0.6,
+        soft_dropout_rate: float = 0.2,
+        hard_dropout_rate: float = 0.2,
         external_boundaries: bool = False,
     ):
         super().__init__()
@@ -655,6 +652,7 @@ class SpanEncoder(torch.nn.Module):
                 self.out_dim,
             ),
             layer_norms=(False, True),
+            dropout=soft_dropout_rate,
         )
 
     def forward(
@@ -693,14 +691,10 @@ class SpanEncoder(torch.nn.Module):
         span_contents, span_mask = slice_and_mask(token_embeddings, span_boundaries)
         # shape: (batch_size, self.total_encoding_dim*attention_heads)
         attentional_embeddings = self.attention(span_contents, span_mask)
-        encodings = self.soft_drop(
-            torch.cat(
-                [recurrent_embeddings, attentional_embeddings, context_embedding],
-                dim=-1,
-            )
+        encodings = torch.cat(
+            [recurrent_embeddings, attentional_embeddings, context_embedding], dim=-1,
         )
 
-        # !FIXME: double dropout, we drop once in the previous instruction and once in out
         output = self.out(encodings)
         return output
 
@@ -981,6 +975,40 @@ def masked_multi_cross_entropy(
     return scores.mean()
 
 
+@torch.jit.script
+def anaphoricity_margin_loss(
+    inpt: torch.Tensor,
+    target: torch.Tensor,
+    reduction: str = "elementwise_mean",
+    mention_new_weight: float = 0.5,
+    mention_old_weight: float = 1.0,
+):
+    """
+    Take a batch of vectors of unnormalized class scores and a mask of correct answers
+    and return the margin loss of the anaphoricity
+    The class scores can be padded with `-1e32` for classes that are not relevant
+    """
+    # I have the feeling that this could be made more cleverly efficient but at least this way I
+    # find it clear
+    mention_new_per_sample = target[..., 0].to(torch.float)
+    mention_old_per_sample = target[..., 0].logical_not().to(torch.float)
+    margin_weights = (mention_new_weight * mention_new_per_sample) + (
+        mention_old_weight * mention_old_per_sample
+    )
+
+    padded_log_scores = torch.softmax(inpt, dim=-1)
+    anaphoricity_scores = padded_log_scores[..., 0]
+    anaphoricity_margins = (
+        1.0 - (mention_new_per_sample - mention_old_per_sample) * anaphoricity_scores
+    )
+    loss_per_sample = margin_weights * anaphoricity_margins
+    if reduction == "none":
+        return loss_per_sample
+    if reduction == "sum":
+        return loss_per_sample.sum()
+    return loss_per_sample.mean()
+
+
 def multi_cross_entropy(
     inpt: ty.Iterable[torch.Tensor],
     target: ty.Iterable[torch.Tensor],
@@ -1015,16 +1043,19 @@ def slack_rescaled_max_margin(
     """Compute the slack-rescaled max margin loss as in Wiseman et al. (2015)
 
     ## Arguments
-      - `inpt` A float tensor representing the scores of each antecedent candidate
-      - `target` An int tensor containing the indices of the correct antecedents
 
-    Wiseman, Sam, Alexander M. Rush, Stuart M. Shieber, and Jason Weston. 2015.
-    ‘Learning Anaphoricity and Antecedent Ranking Features for Coreference
-    Resolution’. In *Proceedings of the 53rd Annual Meeting of the Association
-    for Computational Linguistics and the 7th International Joint Conference on
-    Natural Language Processing of the Asian Federation of Natural Language
-    Processing*, Beijing, China.
-    <http://aclweb.org/anthology/P/P15/P15-1137.pdf>.
+    - `inpt` A float tensor representing the scores of each antecedent candidate
+    - `target` An int tensor containing the indices of the correct antecedents
+
+    ## References
+
+    - Wiseman, Sam, Alexander M. Rush, Stuart M. Shieber, and Jason Weston. 2015.
+      ‘Learning Anaphoricity and Antecedent Ranking Features for Coreference
+      Resolution’. In *Proceedings of the 53rd Annual Meeting of the Association
+      for Computational Linguistics and the 7th International Joint Conference on
+      Natural Language Processing of the Asian Federation of Natural Language
+      Processing*, Beijing, China.
+      <http://aclweb.org/anthology/P/P15/P15-1137.pdf>.
     """
     scores = []
     for response, key in zip(inpt, target):
