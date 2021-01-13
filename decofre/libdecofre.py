@@ -161,10 +161,9 @@ class FFNN(torch.jit.ScriptModule):
             nonlinearities = [torch.nn.LeakyReLU() for _ in range(self.depth)]
         else:
             nonlinearities = list(nonlinearities)
+        layer_norms_layers: ty.List[ty.Optional[torch.nn.LayerNorm]]
         if layer_norms is None:
-            layer_norm_layers = [None] * len(
-                self.dimensions
-            )  # type: ty.List[ty.Optional[torch.nn.LayerNorm]]
+            layer_norm_layers = [None] * len(self.dimensions)
         else:
             layer_norm_layers = [
                 torch.nn.LayerNorm(d) if n else None
@@ -587,12 +586,13 @@ class MaskedLinearSelfAttention(torch.jit.ScriptModule):
         masked_weights = torch.where(
             mask.unsqueeze(2),
             raw_weights,
-            # FIXME: Switch this to a scalar as soon as https://github.com/pytorch/pytorch/pull/40336
-            # lands in stable
+            # FIXME: Switch this to a scalar as soon as
+            # <https://github.com/pytorch/pytorch/issues/9190> supports type casting (here we want a
+            # float but -1e32 is a double)
             torch.tensor(-1e32, device=inpt.device, dtype=torch.float),
         )
         normalized_weights = torch.nn.functional.softmax(masked_weights, dim=-2)
-        # shape: (batch_size, features_dim, n_heads)
+        # shape: (batch_size, featurespyth_dim, n_heads)
         attended = torch.einsum("nij,nik->njk", (inpt, normalized_weights))
         # shape: (batch_size, features_dim*n_heads)
         head_merged = attended.reshape((inpt.size(0), self.features_dim * self.n_heads))
