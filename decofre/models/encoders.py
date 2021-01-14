@@ -768,6 +768,9 @@ class BERTEncoder(Encoder):
 
             encoder_config = {
                 "type": "bert",
+                "combine_layers": getattr(self.model.tokens_encoder, "combine_layers", None),
+                "fine_tune": self.model.tokens_encoder.fine_tune,
+                "weight_layers": self.model.tokens_encoder.weight_layers,
                 "span_encoding_dim": self.model.out_dim,
                 "hidden_dim": self.model.span_encoder.hidden_dim,
                 "features": features_dump,
@@ -830,6 +833,7 @@ class BERTEncoder(Encoder):
         features: ty.Iterable[ty.Dict[str, ty.Any]] = None,
         external_boundaries: bool = False,
         fine_tune: bool = False,
+        weight_layers: bool = False,
         combine_layers: ty.Optional[ty.Sequence[int]] = None,
         soft_dropout_rate: float = 0.2,
         hard_dropout_rate: float = 0.2,
@@ -842,6 +846,7 @@ class BERTEncoder(Encoder):
             combine_layers=combine_layers,
             project=project,
             fine_tune=fine_tune,
+            weight_layers=weight_layers,
         )
         featureless_span_encoder = libdecofre.SpanEncoder(
             words_encoding_dim=words_encoder.out_dim,
