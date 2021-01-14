@@ -476,13 +476,13 @@ class BERTWordEncoder(torch.nn.Module):
         self.weight_layers = weight_layers
         # Normalize indices
         self.combine_layers: ty.Optional[ty.List[int]]
-        self.combination_scaling = torch.nn.Parameter(
-            torch.tensor([1.0]), requires_grad=False
-        )
         if combine_layers is not None:
             self.combine_layers = sorted(
                 n if n >= 0 else self.model.config.num_hidden_layers + n
                 for n in combine_layers
+            )
+            self.combination_scaling = torch.nn.Parameter(
+                torch.tensor([1.0]), requires_grad=False
             )
             self.layer_weights = torch.nn.Parameter(
                 torch.ones((len(self.combine_layers),)), requires_grad=False
