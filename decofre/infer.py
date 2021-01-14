@@ -289,11 +289,12 @@ def main_entry_point(argv=None):
                 mention_span._.cluster = i
                 if len(c) > 1:
                     mention_span._.singleton = False
+
                 doc._.clusters[i].append(mention_span)
 
-        # augmented_doc_path = intermediary_dir / "coref_doc.spacy.bin"
-        # with open(augmented_doc_path, "wb") as out_stream:
-        #     out_stream.write(doc.to_bytes())
+    augmented_doc_path = intermediary_dir / "coref_doc.spacy.json"
+    with open(augmented_doc_path, "wb") as out_stream:
+        out_stream.write(orjson.dumps(doc.to_json()))
 
     with smart_open(arguments["<output>"], "w") as out_stream:
         out_stream.write(text_out(doc, latex=arguments["--latex"]))
