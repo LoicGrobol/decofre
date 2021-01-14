@@ -113,7 +113,7 @@ def antecedents_from_mentions(
     max_candidates: int = 100,
     distance_buckets: ty.Sequence[int] = (1, 2, 3, 4, 5, 7, 15, 32, 63),
 ) -> ty.Dict[str, ty.Dict[str, AntecedentFeaturesDict]]:
-    """Extract the antecedents dataset from an ANCOR TEI document."""
+    """Extract an antecedent dataset from a list of detected mentions."""
 
     sorted_mentions = sorted(mentions, key=lambda m: (m["start"], m["end"]))
     if len(sorted_mentions) < 2:

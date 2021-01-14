@@ -68,6 +68,7 @@ bert_encoder_schema = schema.Schema(
         schema.Optional("hard_dropout_rate", default=0.6): schema.Use(float),
         schema.Optional("project", default=False): bool,
         schema.Optional("fine_tune", default=False): bool,
+        schema.Optional("weight_layers", default=False): bool,
         schema.Optional("combine_layers", default=None): [schema.Use(int)],
         "hidden_dim": schema.Use(int),
         "features": [schema.Or(raw_features_schema, categorical_features_schema)],
