@@ -592,7 +592,7 @@ class MaskedLinearSelfAttention(torch.jit.ScriptModule):
             torch.tensor(-1e32, device=inpt.device, dtype=torch.float),
         )
         normalized_weights = torch.nn.functional.softmax(masked_weights, dim=-2)
-        # shape: (batch_size, featurespyth_dim, n_heads)
+        # shape: (batch_size, features_dim, n_heads)
         attended = torch.einsum("nij,nik->njk", (inpt, normalized_weights))
         # shape: (batch_size, features_dim*n_heads)
         head_merged = attended.reshape((inpt.size(0), self.features_dim * self.n_heads))

@@ -6,6 +6,8 @@ Usage:
 
 Options:
   --config <f>  Path to a JSON train config file (mandatory)
+  --init-cor <f>  Path to a pretrained coreference resolution model to continue training
+  --init-det <f>  Path to a pretrained mentions detection model to continue training
   --debug  Verbose training display
   --device <d>  The device to use for computations (defaults to `cuda:0` or `cpu`)
   --encoder <f>  Path to a serialized span encoding model to preload
@@ -14,6 +16,11 @@ Options:
   --out-dir <p>  Output directory, end with `/` to make it a timestamped subdir (default:
                  decofre-<timestamp>)
   -h, --help  Show this screen.
+
+
+Notes:
+  - Using one of the `--init` option will disconnect model training since the mention detection and
+    coreference resolution models won't share an encoder anymore.
 """
 
 import datetime
@@ -228,6 +235,12 @@ def main_entry_point(argv=None):
         },
         device=arguments["--device"],
     )
+
+    if arguments["--init-cor"] is not None:
+        cor = decofre.models.defaults.Scorer.load(arguments["--init-cor"])
+
+    if arguments["--init-det"] is not None:
+        det = decofre.models.defaults.Detector.load(arguments["--init-det"])
 
     if train_config["training-scheme"]["type"] == "sequential":
         from decofre.training import sequential as training_scheme
