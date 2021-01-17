@@ -11,6 +11,7 @@ Arguments:
 
 Options:
   -h --help  Show this screen.
+  --from <format>  Input format [default: raw_text]
   --intermediary-dir <path>  A path to a directory to use for intermediary files,
                              defaults to a self-destructing temp dir
   --lang <name>  spaCy model handle to use [default: fr_core_news_lg]
@@ -36,7 +37,7 @@ import spacy
 from docopt import docopt
 from typing_extensions import TypedDict
 
-from decofre.formats import raw_text
+from decofre.formats import formats
 from decofre import detmentions, score, clusterize
 
 from decofre import __version__
@@ -90,6 +91,9 @@ def dir_manager(
         d_path.mkdir(parents=True, exist_ok=True)
         if cleanup is None:
             cleanup = False
+        elif cleanup:
+            if d_path.glob("*"):
+                raise ValueError(f"{d_path} is not empty.")
 
     try:
         yield d_path
@@ -110,7 +114,7 @@ class AntecedentFeaturesDict(TypedDict):
 
 def antecedents_from_mentions(
     mentions: ty.Iterable[ty.Dict[str, ty.Any]],
-    max_candidates: int = 100,
+    max_candidates: int = 128,
     distance_buckets: ty.Sequence[int] = (1, 2, 3, 4, 5, 7, 15, 32, 63),
 ) -> ty.Dict[str, ty.Dict[str, AntecedentFeaturesDict]]:
     """Extract an antecedent dataset from a list of detected mentions."""
@@ -240,7 +244,7 @@ def main_entry_point(argv=None):
         with open(initial_doc_path, "wb") as out_stream:
             out_stream.write(doc.to_bytes())
 
-        spans = list(raw_text.spans_from_doc(doc))
+        spans = list(formats[arguments["--from"]].spans_from_doc(doc))
 
         spans_path = intermediary_dir / "spans.json"
         with open(spans_path, "wb") as out_stream:
