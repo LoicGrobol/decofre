@@ -1,28 +1,3 @@
-"""End-to-end coreference resolution
-
-Usage:
-  infer [options] <detect-model> <coref-model> <input> [<output>]
-
-Arguments:
-  <detect-model>  The mention detection model
-  <coref-model>  The coreference resolution model
-  <input>  The input file (raw text in French), `-` for standard input
-  <output>  The output file, `-` for standard input (default)
-
-Options:
-  -h --help  Show this screen.
-  --from <format>  Input format [default: raw_text]
-  --intermediary-dir <path>  A path to a directory to use for intermediary files,
-                             defaults to a self-destructing temp dir
-  --lang <name>  spaCy model handle to use [default: fr_core_news_lg]
-  --latex  Format the output for exploitation in LaTeX (very experimental)
-  --version   Show version.
-
-Notes:
-  Be warned that if you are using an existing directory as `--intermediary-dir`, existing files in
-  it might be mercilessly overwritten, proceed with caution.
-"""
-
 import contextlib
 import pathlib
 import shutil
@@ -30,17 +5,17 @@ import sys
 import tempfile
 import typing as ty
 
+import click
+import click_pathlib
 import numpy as np
 import orjson
 import spacy
 
-from docopt import docopt
+from typing import Optional, TextIO
 from typing_extensions import TypedDict
 
 from decofre.formats import formats
 from decofre import detmentions, score, clusterize
-
-from decofre import __version__
 
 
 spacy.tokens.Doc.set_extension("clusters", default=None)
@@ -229,22 +204,59 @@ def text_out(doc: spacy.tokens.Doc, latex: bool = False) -> str:
     return "".join(res)
 
 
-def main_entry_point(argv=None):
-    arguments = docopt(__doc__, version=f"decofre {__version__}")
-    if arguments["<output>"] is None:
-        arguments["<output>"] = "-"
+@click.command(help="End-to-end coreference resolution")
+@click.argument(
+    "detect-model", type=click_pathlib.Path(exists=True, dir_okay=False),
+)
+@click.argument(
+    "coref-model", type=click_pathlib.Path(exists=True, dir_okay=False),
+)
+@click.argument(
+    "input_file", type=click.File("r"),
+)
+@click.argument(
+    "output_file", type=click.File("w", atomic=True), default="-",
+)
+@click.option(
+    "--from",
+    "input_format",
+    type=click.Choice(formats.keys()),
+    default="raw_text",
+    help="The input format",
+    show_default=True,
+)
+@click.option(
+    "--intermediary-dir",
+    "intermediary_dir_path",
+    type=click_pathlib.Path(resolve_path=True, file_okay=False),
+    help="A path to a directory to use for intermediary files, defaults to a self-destructing temp dir",
+)
+@click.option("--lang", default="fr_core_news_lg", help="A spaCy model handle for the document.", show_default=True)
+@click.option(
+    "--latex",
+    is_flag=True,
+    help="Format the output for exploitation in LaTeX (very experimental)",
+)
+def main_entry_point(
+    coref_model: pathlib.Path,
+    detect_model: pathlib.Path,
+    input_format: str,
+    input_file: TextIO,
+    intermediary_dir_path: Optional[pathlib.Path],
+    lang: str,
+    latex: bool,
+    output_file: TextIO,
+):
+    nlp = spacy.load(lang)
 
-    nlp = spacy.load(arguments["--lang"])
-
-    with dir_manager(arguments["--intermediary-dir"]) as intermediary_dir:
-        with smart_open(arguments["<input>"]) as in_stream:
-            doc = nlp(in_stream.read())
+    with dir_manager(intermediary_dir_path) as intermediary_dir:
+        doc = nlp(input_file.read())
 
         initial_doc_path = intermediary_dir / "initial_doc.spacy.bin"
         with open(initial_doc_path, "wb") as out_stream:
             out_stream.write(doc.to_bytes())
 
-        spans = list(formats[arguments["--from"]].spans_from_doc(doc))
+        spans = list(formats[input_format].spans_from_doc(doc))
 
         spans_path = intermediary_dir / "spans.json"
         with open(spans_path, "wb") as out_stream:
@@ -255,7 +267,7 @@ def main_entry_point(argv=None):
             [
                 "--mentions",
                 "--no-overlap",
-                arguments["<detect-model>"],
+                str(detect_model),
                 str(spans_path),
                 str(mentions_path),
             ]
@@ -275,7 +287,7 @@ def main_entry_point(argv=None):
 
         coref_scores_path = intermediary_dir / "coref_scores.json"
         score.main_entry_point(
-            [arguments["<coref-model>"], str(antecedents_path), str(coref_scores_path)]
+            [str(coref_model), str(antecedents_path), str(coref_scores_path)]
         )
 
         clusters_path = intermediary_dir / "clusters.json"
@@ -300,9 +312,8 @@ def main_entry_point(argv=None):
         with open(augmented_doc_path, "wb") as out_stream:
             out_stream.write(orjson.dumps(doc.to_json()))
 
-    with smart_open(arguments["<output>"], "w") as out_stream:
-        out_stream.write(text_out(doc, latex=arguments["--latex"]))
-        out_stream.write("\n")
+    output_file.write(text_out(doc, latex=latex))
+    output_file.write("\n")
     # displacy_visu_data = {
     #     "text": doc.text,
     #     "ents": [
