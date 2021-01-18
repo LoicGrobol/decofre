@@ -7,11 +7,12 @@ import typing as ty
 
 import click
 import click_pathlib
+import jsonlines
 import numpy as np
-import orjson
 import spacy
+import ujson as json
 
-from typing import Optional, TextIO
+from typing import Any, Dict, List, Optional, TextIO
 from typing_extensions import TypedDict
 
 from decofre.formats import formats
@@ -204,6 +205,62 @@ def text_out(doc: spacy.tokens.Doc, latex: bool = False) -> str:
     return "".join(res)
 
 
+def mention_to_json(mention: spacy.tokens.Span) -> Dict[str, Any]:
+    return {
+        "text": mention.text,
+        "start": mention.start_char,
+        "token_start": mention.start,
+        "token_end": mention.end,
+        "end": mention.end_char,
+        "type": "pattern",
+        "label": "mention",
+    }
+
+
+def token_to_json(token: spacy.tokens.Token) -> Dict[str, Any]:
+    return {
+        "text": token.text,
+        "start": token.idx,
+        "end": token.idx + len(token),
+        "id": token.i,
+        "ws": bool(token.whitespace_),
+        "disabled": False,
+    }
+
+
+def prodigy_out(doc: spacy.tokens.Doc) -> Dict[str, Any]:
+    res = {
+        "text": doc.text,
+        "tokens": [token_to_json(t) for t in doc],
+        "spans": [],
+        "relations": [],
+    }
+    processed: List[spacy.tokens.Span] = []
+    for c in doc._.clusters.values():
+        antecedent: Optional[spacy.tokens.Span] = None
+        for m in sorted(c, key=lambda m: (m.end, m.start)):
+            if any(
+                o.start <= m.start <= o.end or o.start <= m.end <= o.end
+                for o in processed
+            ):
+                continue
+            res["spans"].append(mention_to_json(m))
+            if antecedent is not None:
+                res["relations"].append(
+                    {
+                        "head": antecedent.start,
+                        "child": m.start,
+                        "head_span": mention_to_json(antecedent),
+                        "child_span": mention_to_json(m),
+                        "label": "COREF",
+                    }
+                )
+            antecedent = m
+            processed.append(m)
+
+    return res
+
+
 @click.command(help="End-to-end coreference resolution")
 @click.argument(
     "detect-model", type=click_pathlib.Path(exists=True, dir_okay=False),
@@ -231,11 +288,21 @@ def text_out(doc: spacy.tokens.Doc, latex: bool = False) -> str:
     type=click_pathlib.Path(resolve_path=True, file_okay=False),
     help="A path to a directory to use for intermediary files, defaults to a self-destructing temp dir",
 )
-@click.option("--lang", default="fr_core_news_lg", help="A spaCy model handle for the document.", show_default=True)
+@click.option(
+    "--lang",
+    default="fr_core_news_lg",
+    help="A spaCy model handle for the document.",
+    show_default=True,
+)
 @click.option(
     "--latex",
     is_flag=True,
     help="Format the output for exploitation in LaTeX (very experimental)",
+)
+@click.option(
+    "--prodigy",
+    is_flag=True,
+    help="Format the output for exploitation in Prodigy (very experimental)",
 )
 def main_entry_point(
     coref_model: pathlib.Path,
@@ -246,21 +313,18 @@ def main_entry_point(
     lang: str,
     latex: bool,
     output_file: TextIO,
+    prodigy: bool,
 ):
-    nlp = spacy.load(lang)
-
     with dir_manager(intermediary_dir_path) as intermediary_dir:
-        doc = nlp(input_file.read())
+        doc, spans = formats[input_format].get_doc_and_spans(input_file, lang)
 
         initial_doc_path = intermediary_dir / "initial_doc.spacy.bin"
         with open(initial_doc_path, "wb") as out_stream:
             out_stream.write(doc.to_bytes())
 
-        spans = list(formats[input_format].spans_from_doc(doc))
-
         spans_path = intermediary_dir / "spans.json"
-        with open(spans_path, "wb") as out_stream:
-            out_stream.write(orjson.dumps(spans))
+        with open(spans_path, "w") as out_stream:
+            json.dump(spans, out_stream, ensure_ascii=False)
 
         mentions_path = intermediary_dir / "mentions.json"
         detmentions.main_entry_point(
@@ -273,16 +337,18 @@ def main_entry_point(
             ]
         )
 
-        with open(mentions_path, "rb") as in_stream:
-            mentions_lst = orjson.loads(in_stream.read())
+        with open(mentions_path, "r") as in_stream:
+            mentions_lst = json.load(in_stream)
 
         antecedents = antecedents_from_mentions(mentions_lst)
         mention_dict = {m["span_id"]: m for m in mentions_lst}
 
         antecedents_path = intermediary_dir / "antecedents.json"
-        with open(antecedents_path, "wb") as out_stream:
-            out_stream.write(
-                orjson.dumps({"mentions": mention_dict, "antecedents": antecedents})
+        with open(antecedents_path, "w") as out_stream:
+            json.dump(
+                {"mentions": mention_dict, "antecedents": antecedents},
+                out_stream,
+                ensure_ascii=False,
             )
 
         coref_scores_path = intermediary_dir / "coref_scores.json"
@@ -293,8 +359,8 @@ def main_entry_point(
         clusters_path = intermediary_dir / "clusters.json"
         clusterize.main_entry_point([str(coref_scores_path), str(clusters_path)])
 
-        with open(clusters_path, "rb") as in_stream:
-            clusters = orjson.loads(in_stream.read())["clusters"]
+        with open(clusters_path, "r") as in_stream:
+            clusters = json.load(in_stream)["clusters"]
 
         doc._.clusters = dict()
         for i, c in clusters.items():
@@ -309,11 +375,17 @@ def main_entry_point(
                 doc._.clusters[i].append(mention_span)
 
         augmented_doc_path = intermediary_dir / "coref_doc.spacy.json"
-        with open(augmented_doc_path, "wb") as out_stream:
-            out_stream.write(orjson.dumps(doc.to_json()))
+        with open(augmented_doc_path, "w") as out_stream:
+            json.dump(doc.to_json(), out_stream, ensure_ascii=False)
 
-    output_file.write(text_out(doc, latex=latex))
-    output_file.write("\n")
+    if prodigy:
+        output_dict = prodigy_out(doc)
+        writer = jsonlines.Writer(output_file)
+        writer.write(output_dict)
+        writer.close()
+    else:
+        output_file.write(text_out(doc, latex=latex))
+        output_file.write("\n")
     # displacy_visu_data = {
     #     "text": doc.text,
     #     "ents": [

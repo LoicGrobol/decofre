@@ -18,6 +18,10 @@ from typing_extensions import Literal, TypedDict
 T = ty.TypeVar("T")
 
 
+spacy.tokens.Token.set_extension("speaker", default=None)
+spacy.tokens.Token.set_extension("utterance", default=None)
+
+
 def generate_spans_with_context(
     lst: ty.Iterable[T],
     min_width: int,
@@ -116,6 +120,8 @@ class SpanFeats(TypedDict):
     start: int
     end: int
     span_id: str
+    speaker: str
+    utterance: int
 
 
 def spans_from_doc(
@@ -126,6 +132,17 @@ def spans_from_doc(
     length_buckets: ty.Sequence[int] = (1, 2, 3, 4, 5, 7, 15, 32, 63),
 ) -> ty.Iterable[SpanFeats]:
     for sent_n, sent in enumerate(doc.sents):
+        speakers_set = set(t._.speaker for t in sent)
+        if len(speakers_set) > 1:
+            raise ValueError("Inconsistent speakers")
+        else:
+            speaker = speakers_set.pop()
+
+        utterances_set = set(t._.utterance for t in sent)
+        if len(speakers_set) > 1:
+            raise ValueError("Inconsistent utterances")
+        else:
+            utterance = utterances_set.pop()
         # FIXME: this generating lists instead of spacy spans is absurd
         context_spans = generate_spans_with_context(
             [t for t in sent if not t.is_space], min_width, max_width, *context
@@ -168,7 +185,35 @@ def spans_from_doc(
                 "start": span[0].i,
                 "end": span[-1].i,
                 "span_id": f"{span[0].i}-{span[-1].i}",
+                "speaker": speaker,
+                "utterance": utterance,
             }
+
+
+class AvpUtterance(TypedDict):
+    speaker: str
+    startTime: str
+    endTime: str
+    text: str
+    type: str
+    comment: str
+    frames: str
+    audio: str
+
+
+def make_doc(
+    model: spacy.language.Language, utterances: List[AvpUtterance]
+) -> spacy.tokens.Doc:
+    texts = [f'{u["text"]}\n' for u in utterances]
+    doc = model("".join(texts))
+    char_offset = 0
+    for i, (t, u) in enumerate(zip(texts, utterances)):
+        u_span = doc.char_span(char_offset, char_offset + len(t))
+        for token in u_span:
+            token._.speaker = u["speaker"]
+            token._.utterance = i
+        char_offset += len(t)
+    return doc
 
 
 @contextlib.contextmanager
@@ -204,7 +249,8 @@ def get_doc_and_spans(
     document: TextIO, lang: str
 ) -> Tuple[spacy.tokens.doc.Doc, List[SpanFeats]]:
     nlp = spacy.load(lang)
-    doc = nlp(document.read())
+    utterances = orjson.loads(document.read())
+    doc = make_doc(nlp, utterances)
     spans = list(spans_from_doc(doc))
     return doc, spans
 

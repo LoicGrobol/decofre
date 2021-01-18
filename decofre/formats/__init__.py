@@ -1,4 +1,4 @@
 
-from decofre.formats import raw_text
+from decofre.formats import avp, raw_text
 
-formats = {"raw_text": raw_text}
+formats = {"avp": avp, "raw_text": raw_text}
