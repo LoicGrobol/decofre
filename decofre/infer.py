@@ -248,10 +248,10 @@ def prodigy_out(doc: spacy.tokens.Doc) -> Dict[str, Any]:
             if antecedent is not None:
                 res["relations"].append(
                     {
-                        "head": antecedent.start,
-                        "child": m.start,
-                        "head_span": mention_to_json(antecedent),
-                        "child_span": mention_to_json(m),
+                        "head": m.start,
+                        "child": antecedent.start,
+                        "head_span": mention_to_json(m),
+                        "child_span": mention_to_json(antecedent),
                         "label": "COREF",
                     }
                 )
