@@ -1,15 +1,16 @@
 import contextlib
+import re
 import sys
 
 import itertools as it
 import typing as ty
 
 from collections import deque
-from typing import BinaryIO, List, TextIO, Tuple
+from typing import List, TextIO, Tuple
 
 import click
 import numpy as np
-import orjson
+import ujson as json
 import spacy
 
 from typing_extensions import Literal, TypedDict
@@ -20,6 +21,9 @@ T = ty.TypeVar("T")
 
 spacy.tokens.Token.set_extension("speaker", default=None)
 spacy.tokens.Token.set_extension("utterance", default=None)
+
+IGNORE_TOKENS = re.compile(r"^[\[\]\(\)\.,]+$")
+REMOVE_RE = re.compile(r"[\[\]\(\)\.,]")
 
 
 def generate_spans_with_context(
@@ -151,6 +155,8 @@ def spans_from_doc(
         noun_chunks = sorted(sent.noun_chunks)
         for left_context, span, right_context in context_spans:
             span = doc[span[0].i : span[-1].i + 1]
+            if IGNORE_TOKENS.match(span[0].text) or IGNORE_TOKENS.match(span[-1].text):
+                continue
             if left_context:
                 left_context = doc[left_context[0].i : left_context[-1].i + 1]
             else:
@@ -159,9 +165,20 @@ def spans_from_doc(
                 right_context = doc[right_context[0].i : right_context[-1].i + 1]
             else:
                 right_context = []
-            span_content = [t.text for t in span if not t.is_space]
-            left_content = [t.text for t in left_context if not t.is_space]
-            right_content = [t.text for t in right_context if not t.is_space]
+            span_content = [
+                w for t in span if not t.is_space and (w := REMOVE_RE.sub("", t.text))
+            ]
+            assert span_content
+            left_content = [
+                w
+                for t in left_context
+                if not t.is_space and (w := REMOVE_RE.sub("", t.text))
+            ]
+            right_content = [
+                w
+                for t in right_context
+                if not t.is_space and (w := REMOVE_RE.sub("", t.text))
+            ]
             if len(left_content) < context[0]:
                 left_content.insert(0, "<start>")
             if len(right_content) < context[1]:
@@ -245,11 +262,19 @@ def smart_open(
                 pass
 
 
+def sent_on_newlines(doc: spacy.tokens.Doc) -> spacy.tokens.Doc:
+    for i, token in enumerate(doc[:-1]):
+        if token.text == "\n":
+            doc[i + 1].is_sent_start = True
+    return doc
+
+
 def get_doc_and_spans(
     document: TextIO, lang: str
 ) -> Tuple[spacy.tokens.doc.Doc, List[SpanFeats]]:
     nlp = spacy.load(lang)
-    utterances = orjson.loads(document.read())
+    nlp.add_pipe(sent_on_newlines, name="sentence_segmenter", before="parser")
+    utterances = json.load(document)
     doc = make_doc(nlp, utterances)
     spans = list(spans_from_doc(doc))
     return doc, spans
@@ -260,7 +285,7 @@ def get_doc_and_spans(
     "input_file", type=click.File("r"),
 )
 @click.argument(
-    "output_file", type=click.File("wb", atomic=True), default="-",
+    "output_file", type=click.File("w", atomic=True), default="-",
 )
 @click.option(
     "--lang",
@@ -268,9 +293,9 @@ def get_doc_and_spans(
     help="A spaCy model handle for the document.",
     show_default=True,
 )
-def main_entry_point(input_file: TextIO, output_file: BinaryIO, lang: str):
+def main_entry_point(input_file: TextIO, output_file: TextIO, lang: str):
     _, spans = get_doc_and_spans(input_file, lang)
-    output_file.write(orjson.dumps(spans))
+    json.dump(spans, output_file, ensure_ascii=False)
 
 
 if __name__ == "__main__":
