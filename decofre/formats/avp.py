@@ -136,9 +136,11 @@ def spans_from_doc(
     length_buckets: ty.Sequence[int] = (1, 2, 3, 4, 5, 7, 15, 32, 63),
 ) -> ty.Iterable[SpanFeats]:
     for sent_n, sent in enumerate(doc.sents):
-        speakers_set = set(t._.speaker for t in sent)
+        speakers_set = set(t._.speaker for t in sent if t._.speaker is not None)
         if len(speakers_set) > 1:
             raise ValueError("Inconsistent speakers")
+        elif not speakers_set:
+            speaker = None
         else:
             speaker = speakers_set.pop()
 
@@ -225,7 +227,7 @@ def make_doc(
     doc = model("".join(texts))
     char_offset = 0
     for i, (t, u) in enumerate(zip(texts, utterances)):
-        u_span = doc.char_span(char_offset, char_offset + len(t))
+        u_span = doc.char_span(char_offset, char_offset + len(t), alignment_mode="inside")
         for token in u_span:
             token._.speaker = u["speaker"]
             token._.utterance = i
