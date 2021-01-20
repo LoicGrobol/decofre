@@ -227,7 +227,7 @@ def make_doc(
     doc = model("".join(texts))
     char_offset = 0
     for i, (t, u) in enumerate(zip(texts, utterances)):
-        u_span = doc.char_span(char_offset, char_offset + len(t), alignment_mode="inside")
+        u_span = doc.char_span(char_offset, char_offset + len(t))
         for token in u_span:
             token._.speaker = u["speaker"]
             token._.utterance = i
@@ -276,7 +276,9 @@ def get_doc_and_spans(
 ) -> Tuple[spacy.tokens.doc.Doc, List[SpanFeats]]:
     nlp = spacy.load(lang)
     nlp.add_pipe(sent_on_newlines, name="sentence_segmenter", before="parser")
-    utterances = json.load(document)
+    utterances = [
+        u for u in json.load(document) if u["text"] and not u["text"].isspace()
+    ]
     doc = make_doc(nlp, utterances)
     spans = list(spans_from_doc(doc))
     return doc, spans
