@@ -223,7 +223,7 @@ class AvpUtterance(TypedDict):
 def make_doc(
     model: spacy.language.Language, utterances: List[AvpUtterance]
 ) -> spacy.tokens.Doc:
-    texts = [f'{u["text"]}\n' for u in utterances]<>
+    texts = [f'{u["text"]}\n' for u in utterances]
     doc = model("".join(texts))
     char_offset = 0
     for i, (t, u) in enumerate(zip(texts, utterances)):
