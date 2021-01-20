@@ -22,8 +22,8 @@ T = ty.TypeVar("T")
 spacy.tokens.Token.set_extension("speaker", default=None)
 spacy.tokens.Token.set_extension("utterance", default=None)
 
-IGNORE_TOKENS = re.compile(r"^[\[\]\(\)\.,]+$")
-REMOVE_RE = re.compile(r"[\[\]\(\)\.,]")
+IGNORE_TOKENS = re.compile(r"^[\[\]\(\)\.,<>]+$")
+REMOVE_RE = re.compile(r"[\[\]\(\)\.,<>]")
 
 
 def generate_spans_with_context(
@@ -223,7 +223,7 @@ class AvpUtterance(TypedDict):
 def make_doc(
     model: spacy.language.Language, utterances: List[AvpUtterance]
 ) -> spacy.tokens.Doc:
-    texts = [f'{u["text"]}\n' for u in utterances]
+    texts = [f'{u["text"]}\n' for u in utterances]<>
     doc = model("".join(texts))
     char_offset = 0
     for i, (t, u) in enumerate(zip(texts, utterances)):
