@@ -232,7 +232,7 @@ def make_doc(
     for i, (t, u) in enumerate(zip(texts, utterances)):
         u_span = doc.char_span(char_offset, char_offset + len(t))
         u_span._.speaker = u["speaker"]
-        u_span._.uid = u.get("id", f"u{i}")
+        u_span._.uid = u.get("uid", f"u{i}")
         doc.spans["utterances"].append(u_span)
         for token in u_span:
             token._.speaker = u["speaker"]
