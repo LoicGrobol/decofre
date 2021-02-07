@@ -117,12 +117,15 @@ def antecedents_from_mentions(
             )
             u_distance = int(
                 np.digitize(
-                    mention["sentence"] - candidate["sentence"], bins=distance_buckets,
+                    mention["sentence"] - candidate["sentence"],
+                    bins=distance_buckets,
                 )
             )
             m_distance: int = int(
                 np.digitize(
-                    len(antecedent_candidates) - j, bins=distance_buckets, right=True,
+                    len(antecedent_candidates) - j,
+                    bins=distance_buckets,
+                    right=True,
                 )
             )
             spk_agreement = mention.get("speaker") == candidate.get("speaker")
@@ -239,6 +242,7 @@ def prodigy_out(doc: spacy.tokens.Doc) -> Dict[str, Any]:
     for c in doc._.clusters.values():
         antecedent: Optional[spacy.tokens.Span] = None
         for m in sorted(c, key=lambda m: (m.end, m.start)):
+            # This because prodigy doesn't allow nested spans
             if any(
                 o.start <= m.start <= o.end or o.start <= m.end <= o.end
                 for o in processed
@@ -262,47 +266,74 @@ def prodigy_out(doc: spacy.tokens.Doc) -> Dict[str, Any]:
 
 
 def sacr_out(doc: spacy.tokens.Doc) -> str:
-    mentions_spans = sorted(
-        (m for i, c in doc._.clusters.items() for m in c),
-        key=lambda m: (m.start_char, -m.end_char),
-    )
-    text = doc.text
     res = []
-    open_spans: ty.List[spacy.tokens.Span] = []
-    current_char = 0
-    for m in mentions_spans:
-        while open_spans and open_spans[-1].end_char <= m.start_char:
+    open_spans: ty.List[spacy.tokens.Span]
+    sents = doc.spans.get("utterances", doc.sents)
+    for sentence in sents:
+        sentence_res = []
+        # FIXME: this relies on having imported avp, which sets these extensions in the global space
+        # we need a better mechanism
+        if sentence._.speaker is not None:
+            sentence_res.append(f"#speaker: {sentence._.speaker}\n\n")
+        if sentence._.uid is not None:
+            sentence_res.append(f"#uid: {sentence._.uid}\n\n")
+        mentions_spans = sorted(
+            (
+                m
+                for i, c in doc._.clusters.items()
+                for m in c
+                if sentence.start_char <= m.start_char < m.end_char <= sentence.end_char
+            ),
+            key=lambda m: (m.start_char, -m.end_char),
+        )
+        text = sentence.text
+        current_char = 0
+        open_spans: ty.List[spacy.tokens.Span] = []
+        for m in mentions_spans:
+            # TODO: stop fiddling with char indices ffs
+            while open_spans and open_spans[-1].end_char <= m.start_char:
+                span_to_close = open_spans.pop()
+                sentence_res.append(
+                    text[current_char : span_to_close.end_char - sentence.start_char]
+                )
+                sentence_res.append("}")
+                current_char = span_to_close.end_char - sentence.start_char
+            if current_char < m.start_char:
+                sentence_res.append(
+                    text[current_char : m.start_char - sentence.start_char]
+                )
+                current_char = m.start_char - sentence.start_char
+            sentence_res.append(f"{{{m._.cluster} ")
+            open_spans.append(m)
+        while open_spans:
             span_to_close = open_spans.pop()
-            res.append(text[current_char : span_to_close.end_char])
-            res.append("}")
-            current_char = span_to_close.end_char
-        if current_char < m.start_char:
-            res.append(text[current_char : m.start_char])
-            current_char = m.start_char
-        res.append(f"{{{m._.cluster} ")
-        open_spans.append(m)
-    while open_spans:
-        span_to_close = open_spans.pop()
-        res.append(text[current_char : span_to_close.end_char])
-        res.append("}")
-        current_char = span_to_close.end_char
-    res.append(text[current_char:])
-    return "".join(res)
-
+            sentence_res.append(
+                text[current_char : span_to_close.end_char - sentence.start_char]
+            )
+            sentence_res.append("}")
+            current_char = span_to_close.end_char - sentence.start_char
+        sentence_res.append(text[current_char:])
+        res.append("".join(sentence_res).strip())
+    return "\n\n".join((s for s in res if s and not s.isspace()))
 
 
 @click.command(help="End-to-end coreference resolution")
 @click.argument(
-    "detect-model", type=click_pathlib.Path(exists=True, dir_okay=False),
+    "detect-model",
+    type=click_pathlib.Path(exists=True, dir_okay=False),
 )
 @click.argument(
-    "coref-model", type=click_pathlib.Path(exists=True, dir_okay=False),
+    "coref-model",
+    type=click_pathlib.Path(exists=True, dir_okay=False),
 )
 @click.argument(
-    "input_file", type=click.File("r"),
+    "input_file",
+    type=click.File("r"),
 )
 @click.argument(
-    "output_file", type=click.File("w", atomic=True), default="-",
+    "output_file",
+    type=click.File("w", atomic=True),
+    default="-",
 )
 @click.option(
     "--from",
@@ -344,9 +375,9 @@ def main_entry_point(
     with dir_manager(intermediary_dir_path) as intermediary_dir:
         doc, spans = formats[input_format].get_doc_and_spans(input_file, lang)
 
-        initial_doc_path = intermediary_dir / "initial_doc.spacy.bin"
-        with open(initial_doc_path, "wb") as out_stream:
-            out_stream.write(doc.to_bytes())
+        initial_doc_path = intermediary_dir / "initial_doc.spacy.json"
+        with open(initial_doc_path, "w") as out_stream:
+            json.dump(doc.to_json(), out_stream, ensure_ascii=False)
 
         spans_path = intermediary_dir / "spans.json"
         with open(spans_path, "w") as out_stream:

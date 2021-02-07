@@ -19,6 +19,8 @@ from typing_extensions import Literal, TypedDict
 T = ty.TypeVar("T")
 
 
+spacy.tokens.Span.set_extension("uid", default=None)
+spacy.tokens.Span.set_extension("speaker", default=None)
 spacy.tokens.Token.set_extension("speaker", default=None)
 spacy.tokens.Token.set_extension("utterance", default=None)
 
@@ -225,9 +227,13 @@ def make_doc(
 ) -> spacy.tokens.Doc:
     texts = [f'{u["text"]}\n' for u in utterances]
     doc = model("".join(texts))
+    doc.spans["utterances"] = []
     char_offset = 0
     for i, (t, u) in enumerate(zip(texts, utterances)):
         u_span = doc.char_span(char_offset, char_offset + len(t))
+        u_span._.speaker = u["speaker"]
+        u_span._.uid = u.get("id", f"u{i}")
+        doc.spans["utterances"].append(u_span)
         for token in u_span:
             token._.speaker = u["speaker"]
             token._.utterance = i
