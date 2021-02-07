@@ -12,7 +12,7 @@ import numpy as np
 import spacy
 import ujson as json
 
-from typing import Any, Dict, List, Optional, TextIO
+from typing import Any, Dict, List, Literal, Optional, TextIO
 from typing_extensions import TypedDict
 
 from decofre.formats import formats
@@ -261,6 +261,36 @@ def prodigy_out(doc: spacy.tokens.Doc) -> Dict[str, Any]:
     return res
 
 
+def sacr_out(doc: spacy.tokens.Doc) -> str:
+    mentions_spans = sorted(
+        (m for i, c in doc._.clusters.items() for m in c),
+        key=lambda m: (m.start_char, -m.end_char),
+    )
+    text = doc.text
+    res = []
+    open_spans: ty.List[spacy.tokens.Span] = []
+    current_char = 0
+    for m in mentions_spans:
+        while open_spans and open_spans[-1].end_char <= m.start_char:
+            span_to_close = open_spans.pop()
+            res.append(text[current_char : span_to_close.end_char])
+            res.append("}")
+            current_char = span_to_close.end_char
+        if current_char < m.start_char:
+            res.append(text[current_char : m.start_char])
+            current_char = m.start_char
+        res.append(f"{{{m._.cluster} ")
+        open_spans.append(m)
+    while open_spans:
+        span_to_close = open_spans.pop()
+        res.append(text[current_char : span_to_close.end_char])
+        res.append("}")
+        current_char = span_to_close.end_char
+    res.append(text[current_char:])
+    return "".join(res)
+
+
+
 @click.command(help="End-to-end coreference resolution")
 @click.argument(
     "detect-model", type=click_pathlib.Path(exists=True, dir_okay=False),
@@ -295,14 +325,11 @@ def prodigy_out(doc: spacy.tokens.Doc) -> Dict[str, Any]:
     show_default=True,
 )
 @click.option(
-    "--latex",
-    is_flag=True,
-    help="Format the output for exploitation in LaTeX (very experimental)",
-)
-@click.option(
-    "--prodigy",
-    is_flag=True,
-    help="Format the output for exploitation in Prodigy (very experimental)",
+    "--to",
+    "output_format",
+    type=click.Choice(["latex", "prodigy", "sacr", "text"]),
+    default="text",
+    help="Output formats (experimental)",
 )
 def main_entry_point(
     coref_model: pathlib.Path,
@@ -311,9 +338,8 @@ def main_entry_point(
     input_file: TextIO,
     intermediary_dir_path: Optional[pathlib.Path],
     lang: str,
-    latex: bool,
     output_file: TextIO,
-    prodigy: bool,
+    output_format: Literal["latex", "prodigy", "sacr", "text"],
 ):
     with dir_manager(intermediary_dir_path) as intermediary_dir:
         doc, spans = formats[input_format].get_doc_and_spans(input_file, lang)
@@ -378,28 +404,19 @@ def main_entry_point(
         with open(augmented_doc_path, "w") as out_stream:
             json.dump(doc.to_json(), out_stream, ensure_ascii=False)
 
-    if prodigy:
+    if output_format == "latex":
+        output_file.write(text_out(doc, latex=True))
+        output_file.write("\n")
+    elif output_format == "prodigy":
         output_dict = prodigy_out(doc)
         writer = jsonlines.Writer(output_file)
         writer.write(output_dict)
         writer.close()
+    elif output_format == "sacr":
+        output_file.write(sacr_out(doc))
     else:
-        output_file.write(text_out(doc, latex=latex))
+        output_file.write(text_out(doc))
         output_file.write("\n")
-    # displacy_visu_data = {
-    #     "text": doc.text,
-    #     "ents": [
-    #         {
-    #             "start": m.start_char,
-    #             "end": m.end_char,
-    #             "label": m._.cluster
-    #         }
-    #         for m in mention_spans_lst
-    #     ],
-    #     "title": "DeCOFre",
-    # }
-
-    # spacy.displacy.serve(displacy_visu_data, style="ent", manual=True)
 
 
 if __name__ == "__main__":
