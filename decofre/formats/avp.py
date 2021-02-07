@@ -124,7 +124,7 @@ class SpanFeats(TypedDict):
     start: int
     end: int
     span_id: str
-    speaker: str
+    speaker: ty.Optional[str]
     utterance: int
 
 
@@ -264,6 +264,7 @@ def smart_open(
                 pass
 
 
+@spacy.Language.component("sent_on_newlines")
 def sent_on_newlines(doc: spacy.tokens.Doc) -> spacy.tokens.Doc:
     for i, token in enumerate(doc[:-1]):
         if token.text == "\n":
@@ -275,7 +276,7 @@ def get_doc_and_spans(
     document: TextIO, lang: str
 ) -> Tuple[spacy.tokens.doc.Doc, List[SpanFeats]]:
     nlp = spacy.load(lang)
-    nlp.add_pipe(sent_on_newlines, name="sentence_segmenter", before="parser")
+    nlp.add_pipe("sent_on_newlines", name="sentence_segmenter", before="parser")
     utterances = [
         u for u in json.load(document) if u["text"] and not u["text"].isspace()
     ]
