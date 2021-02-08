@@ -1,27 +1,3 @@
-"""End-to-end coreference resolution
-
-Usage:
-  infer [options] <detect-model> <coref-model> <input> [<output>]
-
-Arguments:
-  <detect-model>  The mention detection model
-  <coref-model>  The coreference resolution model
-  <input>  The input file (raw text in French), `-` for standard input
-  <output>  The output file, `-` for standard input (default)
-
-Options:
-  -h --help  Show this screen.
-  --intermediary-dir <path>  A path to a directory to use for intermediary files,
-                             defaults to a self-destructing temp dir
-  --lang <name>  spaCy model handle to use [default: fr_core_news_lg]
-  --latex  Format the output for exploitation in LaTeX (very experimental)
-  --version   Show version.
-
-Notes:
-  Be warned that if you are using an existing directory as `--intermediary-dir`, existing files in
-  it might be mercilessly overwritten, proceed with caution.
-"""
-
 import contextlib
 import pathlib
 import shutil
@@ -29,17 +5,18 @@ import sys
 import tempfile
 import typing as ty
 
+import click
+import click_pathlib
+import jsonlines
 import numpy as np
-import orjson
 import spacy
+import ujson as json
 
-from docopt import docopt
+from typing import Any, Dict, List, Literal, Optional, TextIO
 from typing_extensions import TypedDict
 
-from decofre.formats import raw_text
+from decofre.formats import formats
 from decofre import detmentions, score, clusterize
-
-from decofre import __version__
 
 
 spacy.tokens.Doc.set_extension("clusters", default=None)
@@ -90,6 +67,9 @@ def dir_manager(
         d_path.mkdir(parents=True, exist_ok=True)
         if cleanup is None:
             cleanup = False
+        elif cleanup:
+            if d_path.glob("*"):
+                raise ValueError(f"{d_path} is not empty.")
 
     try:
         yield d_path
@@ -110,7 +90,7 @@ class AntecedentFeaturesDict(TypedDict):
 
 def antecedents_from_mentions(
     mentions: ty.Iterable[ty.Dict[str, ty.Any]],
-    max_candidates: int = 100,
+    max_candidates: int = 128,
     distance_buckets: ty.Sequence[int] = (1, 2, 3, 4, 5, 7, 15, 32, 63),
 ) -> ty.Dict[str, ty.Dict[str, AntecedentFeaturesDict]]:
     """Extract an antecedent dataset from a list of detected mentions."""
@@ -137,12 +117,15 @@ def antecedents_from_mentions(
             )
             u_distance = int(
                 np.digitize(
-                    mention["sentence"] - candidate["sentence"], bins=distance_buckets,
+                    mention["sentence"] - candidate["sentence"],
+                    bins=distance_buckets,
                 )
             )
             m_distance: int = int(
                 np.digitize(
-                    len(antecedent_candidates) - j, bins=distance_buckets, right=True,
+                    len(antecedent_candidates) - j,
+                    bins=distance_buckets,
+                    right=True,
                 )
             )
             spk_agreement = mention.get("speaker") == candidate.get("speaker")
@@ -225,60 +208,216 @@ def text_out(doc: spacy.tokens.Doc, latex: bool = False) -> str:
     return "".join(res)
 
 
-def main_entry_point(argv=None):
-    arguments = docopt(__doc__, version=f"decofre {__version__}")
-    if arguments["<output>"] is None:
-        arguments["<output>"] = "-"
+def mention_to_json(mention: spacy.tokens.Span) -> Dict[str, Any]:
+    return {
+        "text": mention.text,
+        "start": mention.start_char,
+        "token_start": mention.start,
+        "token_end": mention.end,
+        "end": mention.end_char,
+        "type": "pattern",
+        "label": "mention",
+    }
 
-    nlp = spacy.load(arguments["--lang"])
 
-    with dir_manager(arguments["--intermediary-dir"]) as intermediary_dir:
-        with smart_open(arguments["<input>"]) as in_stream:
-            doc = nlp(in_stream.read())
+def token_to_json(token: spacy.tokens.Token) -> Dict[str, Any]:
+    return {
+        "text": token.text,
+        "start": token.idx,
+        "end": token.idx + len(token),
+        "id": token.i,
+        "ws": bool(token.whitespace_),
+        "disabled": False,
+    }
 
-        initial_doc_path = intermediary_dir / "initial_doc.spacy.bin"
-        with open(initial_doc_path, "wb") as out_stream:
-            out_stream.write(doc.to_bytes())
 
-        spans = list(raw_text.spans_from_doc(doc))
+def prodigy_out(doc: spacy.tokens.Doc) -> Dict[str, Any]:
+    res = {
+        "text": doc.text,
+        "tokens": [token_to_json(t) for t in doc],
+        "spans": [],
+        "relations": [],
+    }
+    processed: List[spacy.tokens.Span] = []
+    for c in doc._.clusters.values():
+        antecedent: Optional[spacy.tokens.Span] = None
+        for m in sorted(c, key=lambda m: (m.end, m.start)):
+            # This because prodigy doesn't allow nested spans
+            if any(
+                o.start <= m.start <= o.end or o.start <= m.end <= o.end
+                for o in processed
+            ):
+                continue
+            res["spans"].append(mention_to_json(m))
+            if antecedent is not None:
+                res["relations"].append(
+                    {
+                        "head": m.start,
+                        "child": antecedent.start,
+                        "head_span": mention_to_json(m),
+                        "child_span": mention_to_json(antecedent),
+                        "label": "COREF",
+                    }
+                )
+            antecedent = m
+            processed.append(m)
+
+    return res
+
+
+def sacr_out(doc: spacy.tokens.Doc) -> str:
+    res = []
+    open_spans: ty.List[spacy.tokens.Span]
+    sents = doc.spans.get("utterances", doc.sents)
+    for sentence in sents:
+        sentence_res = []
+        # FIXME: this relies on having imported avp, which sets these extensions in the global space
+        # we need a better mechanism
+        if sentence._.speaker is not None:
+            sentence_res.append(f"#speaker: {sentence._.speaker}\n\n")
+        if sentence._.uid is not None:
+            sentence_res.append(f"#uid: {sentence._.uid}\n\n")
+        mentions_spans = sorted(
+            (
+                m
+                for i, c in doc._.clusters.items()
+                for m in c
+                if sentence.start_char <= m.start_char < m.end_char <= sentence.end_char
+            ),
+            key=lambda m: (m.start_char, -m.end_char),
+        )
+        text = sentence.text
+        current_char = 0
+        open_spans: ty.List[spacy.tokens.Span] = []
+        for m in mentions_spans:
+            # TODO: stop fiddling with char indices ffs
+            while open_spans and open_spans[-1].end_char <= m.start_char:
+                span_to_close = open_spans.pop()
+                sentence_res.append(
+                    text[current_char : span_to_close.end_char - sentence.start_char]
+                )
+                sentence_res.append("}")
+                current_char = span_to_close.end_char - sentence.start_char
+            if current_char < m.start_char:
+                sentence_res.append(
+                    text[current_char : m.start_char - sentence.start_char]
+                )
+                current_char = m.start_char - sentence.start_char
+            sentence_res.append(f"{{{m._.cluster} ")
+            open_spans.append(m)
+        while open_spans:
+            span_to_close = open_spans.pop()
+            sentence_res.append(
+                text[current_char : span_to_close.end_char - sentence.start_char]
+            )
+            sentence_res.append("}")
+            current_char = span_to_close.end_char - sentence.start_char
+        sentence_res.append(text[current_char:])
+        res.append("".join(sentence_res).strip())
+    return "\n\n".join((s for s in res if s and not s.isspace()))
+
+
+@click.command(help="End-to-end coreference resolution")
+@click.argument(
+    "detect-model",
+    type=click_pathlib.Path(exists=True, dir_okay=False),
+)
+@click.argument(
+    "coref-model",
+    type=click_pathlib.Path(exists=True, dir_okay=False),
+)
+@click.argument(
+    "input_file",
+    type=click.File("r"),
+)
+@click.argument(
+    "output_file",
+    type=click.File("w", atomic=True),
+    default="-",
+)
+@click.option(
+    "--from",
+    "input_format",
+    type=click.Choice(formats.keys()),
+    default="raw_text",
+    help="The input format",
+    show_default=True,
+)
+@click.option(
+    "--intermediary-dir",
+    "intermediary_dir_path",
+    type=click_pathlib.Path(resolve_path=True, file_okay=False),
+    help="A path to a directory to use for intermediary files, defaults to a self-destructing temp dir",
+)
+@click.option(
+    "--lang",
+    default="fr_core_news_lg",
+    help="A spaCy model handle for the document.",
+    show_default=True,
+)
+@click.option(
+    "--to",
+    "output_format",
+    type=click.Choice(["latex", "prodigy", "sacr", "text"]),
+    default="text",
+    help="Output formats (experimental)",
+)
+def main_entry_point(
+    coref_model: pathlib.Path,
+    detect_model: pathlib.Path,
+    input_format: str,
+    input_file: TextIO,
+    intermediary_dir_path: Optional[pathlib.Path],
+    lang: str,
+    output_file: TextIO,
+    output_format: Literal["latex", "prodigy", "sacr", "text"],
+):
+    with dir_manager(intermediary_dir_path) as intermediary_dir:
+        doc, spans = formats[input_format].get_doc_and_spans(input_file, lang)
+
+        initial_doc_path = intermediary_dir / "initial_doc.spacy.json"
+        with open(initial_doc_path, "w") as out_stream:
+            json.dump(doc.to_json(), out_stream, ensure_ascii=False)
 
         spans_path = intermediary_dir / "spans.json"
-        with open(spans_path, "wb") as out_stream:
-            out_stream.write(orjson.dumps(spans))
+        with open(spans_path, "w") as out_stream:
+            json.dump(spans, out_stream, ensure_ascii=False)
 
         mentions_path = intermediary_dir / "mentions.json"
         detmentions.main_entry_point(
             [
                 "--mentions",
                 "--no-overlap",
-                arguments["<detect-model>"],
+                str(detect_model),
                 str(spans_path),
                 str(mentions_path),
             ]
         )
 
-        with open(mentions_path, "rb") as in_stream:
-            mentions_lst = orjson.loads(in_stream.read())
+        with open(mentions_path, "r") as in_stream:
+            mentions_lst = json.load(in_stream)
 
         antecedents = antecedents_from_mentions(mentions_lst)
         mention_dict = {m["span_id"]: m for m in mentions_lst}
 
         antecedents_path = intermediary_dir / "antecedents.json"
-        with open(antecedents_path, "wb") as out_stream:
-            out_stream.write(
-                orjson.dumps({"mentions": mention_dict, "antecedents": antecedents})
+        with open(antecedents_path, "w") as out_stream:
+            json.dump(
+                {"mentions": mention_dict, "antecedents": antecedents},
+                out_stream,
+                ensure_ascii=False,
             )
 
         coref_scores_path = intermediary_dir / "coref_scores.json"
         score.main_entry_point(
-            [arguments["<coref-model>"], str(antecedents_path), str(coref_scores_path)]
+            [str(coref_model), str(antecedents_path), str(coref_scores_path)]
         )
 
         clusters_path = intermediary_dir / "clusters.json"
         clusterize.main_entry_point([str(coref_scores_path), str(clusters_path)])
 
-        with open(clusters_path, "rb") as in_stream:
-            clusters = orjson.loads(in_stream.read())["clusters"]
+        with open(clusters_path, "r") as in_stream:
+            clusters = json.load(in_stream)["clusters"]
 
         doc._.clusters = dict()
         for i, c in clusters.items():
@@ -293,26 +432,22 @@ def main_entry_point(argv=None):
                 doc._.clusters[i].append(mention_span)
 
         augmented_doc_path = intermediary_dir / "coref_doc.spacy.json"
-        with open(augmented_doc_path, "wb") as out_stream:
-            out_stream.write(orjson.dumps(doc.to_json()))
+        with open(augmented_doc_path, "w") as out_stream:
+            json.dump(doc.to_json(), out_stream, ensure_ascii=False)
 
-    with smart_open(arguments["<output>"], "w") as out_stream:
-        out_stream.write(text_out(doc, latex=arguments["--latex"]))
-        out_stream.write("\n")
-    # displacy_visu_data = {
-    #     "text": doc.text,
-    #     "ents": [
-    #         {
-    #             "start": m.start_char,
-    #             "end": m.end_char,
-    #             "label": m._.cluster
-    #         }
-    #         for m in mention_spans_lst
-    #     ],
-    #     "title": "DeCOFre",
-    # }
-
-    # spacy.displacy.serve(displacy_visu_data, style="ent", manual=True)
+    if output_format == "latex":
+        output_file.write(text_out(doc, latex=True))
+        output_file.write("\n")
+    elif output_format == "prodigy":
+        output_dict = prodigy_out(doc)
+        writer = jsonlines.Writer(output_file)
+        writer.write(output_dict)
+        writer.close()
+    elif output_format == "sacr":
+        output_file.write(sacr_out(doc))
+    else:
+        output_file.write(text_out(doc))
+        output_file.write("\n")
 
 
 if __name__ == "__main__":
