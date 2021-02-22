@@ -42,6 +42,7 @@ import typing as ty
 from collections import deque
 
 import spacy
+import spacy.util
 
 import numpy as np
 import orjson
@@ -70,6 +71,14 @@ MENTION_TYPES = frozenset(("N", "PR"))
 IGNORED_MENTION_TYPES = frozenset(("NULL",))
 
 TOKEN_TAGS = frozenset((f"{TEI}w", f"{TEI}pc"))
+
+
+class CustomTokenizer(spacy.util.DummyTokenizer):
+    def __init__(self, vocab):
+        self.vocab = vocab
+
+    def __call__(self, words):
+        return spacy.tokens.Doc(self.vocab, words=words)
 
 
 class ElementNotFoundError(Exception):
@@ -324,7 +333,7 @@ def get_mentions(tree: etree._ElementTree,) -> ty.Dict[ty.Tuple[str, str], Menti
     texts_lst = tree.findall(f"{TEI}text")
     if not texts_lst:
         raise ValueError(
-            f"Attempting to extract mentions from a document without a text"
+            "Attempting to extract mentions from a document without a text"
         )
 
     tokens_id_store = {
@@ -468,7 +477,7 @@ def spans_from_doc(
     w_pos = get_w_pos(doc)
     units = get_mentions(doc)
     nlp = spacy.load("fr_core_news_lg")
-    nlp.tokenizer = nlp.tokenizer.tokens_from_list
+    nlp.tokenizer = CustomTokenizer(nlp.vocab)
 
     for utterance in doc.findall(".//tei:u", namespaces=NSMAP):
         content: ty.List[etree._Element] = list(utterance.iter(*TOKEN_TAGS))
