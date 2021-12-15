@@ -15,7 +15,7 @@ to apply it to other languages and genres, though.
 1. Install with pip
 
    ```console
-   python -m pip install --pre decofre
+   python -m pip install decofre
    ```
 
 2. Install the additional dependencies
