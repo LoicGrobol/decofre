@@ -295,7 +295,7 @@ def initialize_models_from_config(
     device: ty.Union[str, torch.device] = "cpu",
 ) -> ty.Tuple[Detector, Scorer]:
     model_config = config.model_config_schema.validate(
-        decofre.utils.load_jsonnet(config_path)
+        decofre.utils.load_json5(config_path)
     )
     logger.debug(f"Model config:\n{pprint.pformat(dict(model_config))}")
     logger.debug(f"initialisation:\n{pprint.pformat(dict(initialisation))}")

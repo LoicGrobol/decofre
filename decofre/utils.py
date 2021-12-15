@@ -5,9 +5,8 @@ import sys
 
 from typing import Optional
 
-import _jsonnet
-
 import git
+import pyjson5
 import schema
 import torch
 import torch.jit
@@ -131,9 +130,10 @@ class PathUri:
         return p
 
 
-def load_jsonnet(json_path):
+def load_json5(json_path):
     json_path = pathlib.Path(json_path).resolve()
-    raw_config = json.loads(_jsonnet.evaluate_file(str(json_path)))
+    with open(json_path) as in_stream:
+        raw_config = pyjson5.decode_io(in_stream)
 
     def visit(p, k, v):
         # Deal with file uris. For now only `file:///absolute/path` and

@@ -214,7 +214,6 @@ def task_copy_tiny_fixtures():
     }
 
 
-
 def main_entry_point(argv=None):
     import doit
     doit.run(globals())

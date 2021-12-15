@@ -98,7 +98,7 @@ def load_train_config(config_path=ty.Union[str, pathlib.Path]):
             ),
         }
     )
-    config = config_schema.validate(utils.load_jsonnet(config_path))
+    config = config_schema.validate(utils.load_json5(config_path))
     if "lexicon-source" not in config:
         config["lexicon-source"] = config["mention-detection"]["train-file"]
     return config
